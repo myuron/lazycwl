@@ -1,0 +1,12 @@
+# Nix / direnv
+.direnv/
+result
+
+# Editor
+.envrc
+
+# Claude Code skills (generated)
+.claude/
+
+# Binary
+lazycwl

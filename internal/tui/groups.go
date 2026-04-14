@@ -64,7 +64,9 @@ func (m Model) navigateForward() (tea.Model, tea.Cmd) {
 			}
 		}
 		m.currentView = viewStreams
+		m.groupOffset = m.offset
 		m.cursor = 0
+		m.offset = 0
 		m.searchQuery = ""
 		m.loading = true
 		return m, m.fetchLogStreams(m.selectedGroup)
@@ -93,6 +95,8 @@ func (m Model) navigateBack() (tea.Model, tea.Cmd) {
 	case viewStreams:
 		m.currentView = viewGroups
 		m.cursor = m.groupCursor
+		m.offset = m.groupOffset
+		m.adjustOffset()
 		m.logStreams = nil
 		m.searchQuery = ""
 		m.sortByName = false

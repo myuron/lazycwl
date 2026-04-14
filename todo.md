@@ -61,3 +61,13 @@
 - [x] 2026-04-14 3カラムレイアウト → 2カラム（左: LogGroups、右: LogStreams + Last Event）に変更
 - [x] 2026-04-14 GetLogEvents にページネーション追加（NextForwardToken をループして全イベント取得）
 - [x] 2026-04-14 複数ストリーム並行取得の並行数制限（セマフォで最大5並行）+ GetMultiStreamLogEvents をawsパッケージに移動
+
+## スクロール対応 (#2, #4)
+- [x] 2026-04-14 スクロールオフセットのテスト作成（10テスト）
+- [x] 2026-04-14 スクロールオフセットの実装（Model に offset/groupOffset フィールド追加）
+- [x] 2026-04-14 render関数をオフセット対応に修正（renderGroupList, renderGroupListInactive, renderStreamList）
+- [x] 2026-04-14 カーソル移動時のビューポート追従ロジック実装（adjustOffset + 全カーソル操作箇所に適用）
+
+## ペインサイズ不一致修正 (#3)
+- [x] 2026-04-14 ペイン高さ/幅テスト作成（5テスト）
+- [x] 2026-04-14 render関数の末尾改行によるHeight超過を修正（strings.TrimRight）

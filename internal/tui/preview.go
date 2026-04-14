@@ -66,14 +66,19 @@ func (m Model) viewTwoColumn() string {
 	if m.mode != modeNormal {
 		contentHeight--
 	}
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
 
 	leftStyle := lipgloss.NewStyle().
 		Width(leftWidth - 2).
+		Height(contentHeight).
 		Padding(0, 1).
 		BorderStyle(lipgloss.RoundedBorder())
 
 	rightStyle := lipgloss.NewStyle().
 		Width(rightWidth - 2).
+		Height(contentHeight).
 		Padding(0, 1).
 		BorderStyle(lipgloss.RoundedBorder())
 
@@ -98,18 +103,48 @@ func (m Model) viewTwoColumn() string {
 	left := leftStyle.Render(strings.TrimSuffix(leftCol, "\n"))
 	right := rightStyle.Render(strings.TrimSuffix(rightCol, "\n"))
 
-	main := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	// Build output line-by-line to avoid lipgloss JoinHorizontal/JoinVertical
+	// adding unexpected padding that can cause overflow on some terminals.
+	leftLines := strings.Split(left, "\n")
+	rightLines := strings.Split(right, "\n")
 
-	inputLine := m.renderInputLine()
-	statusBar := m.renderStatusBar()
-
-	parts := []string{main}
-	if inputLine != "" {
-		parts = append(parts, inputLine)
+	maxPaneLines := len(leftLines)
+	if len(rightLines) > maxPaneLines {
+		maxPaneLines = len(rightLines)
 	}
-	parts = append(parts, statusBar)
 
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	var b strings.Builder
+	for i := 0; i < maxPaneLines; i++ {
+		l := ""
+		if i < len(leftLines) {
+			l = leftLines[i]
+		}
+		r := ""
+		if i < len(rightLines) {
+			r = rightLines[i]
+		}
+		b.WriteString(l)
+		b.WriteString(r)
+		b.WriteString("\n")
+	}
+
+	if inputLine := m.renderInputLine(); inputLine != "" {
+		b.WriteString(inputLine)
+		b.WriteString("\n")
+	}
+	b.WriteString(m.renderStatusBar())
+
+	// Hard-cap to m.height - 1 lines to prevent overflow on any terminal
+	result := b.String()
+	lines := strings.Split(result, "\n")
+	maxLines := m.height - 1
+	if maxLines < 1 {
+		maxLines = 1
+	}
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) renderGroupList(maxHeight int) string {

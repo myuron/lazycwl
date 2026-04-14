@@ -39,7 +39,7 @@ func TestModel_ReceiveLogGroups(t *testing.T) {
 		{Name: "/aws/ecs/service-b", RetentionDays: 7, StoredBytes: 2048},
 	}
 
-	model, _ := update(m, logGroupsMsg(groups))
+	model, _ := update(m, logGroupsPageMsg{groups: groups})
 
 	if len(model.logGroups) != 2 {
 		t.Fatalf("expected 2 log groups, got %d", len(model.logGroups))
@@ -182,7 +182,7 @@ func TestModel_ReceiveLogStreams(t *testing.T) {
 		{Name: "stream-002", LastEventTimestamp: time.Now().Add(-time.Minute)},
 	}
 
-	m, _ = update(m, logStreamsMsg(streams))
+	m, _ = update(m, logStreamsPageMsg{streams: streams})
 
 	if len(m.logStreams) != 2 {
 		t.Fatalf("expected 2 streams, got %d", len(m.logStreams))
@@ -1099,6 +1099,145 @@ func TestModel_PaneHeight_ExactMatch(t *testing.T) {
 	// Total should be m.height - 1 lines to prevent top cutoff on some terminals
 	if len(lines) != m.height-1 {
 		t.Errorf("total lines: got %d, want exactly %d", len(lines), m.height-1)
+	}
+}
+
+// --- Pagination: fetch all pages ---
+
+func TestModel_FetchLogGroups_StoresNextToken(t *testing.T) {
+	m := NewModel(nil)
+	token := "next-page-token"
+
+	m, _ = update(m, logGroupsPageMsg{
+		groups:    []aws.LogGroup{{Name: "group-1"}},
+		nextToken: &token,
+	})
+
+	if len(m.logGroups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(m.logGroups))
+	}
+	if m.groupsNextToken == nil || *m.groupsNextToken != token {
+		t.Errorf("expected groupsNextToken=%q, got %v", token, m.groupsNextToken)
+	}
+}
+
+func TestModel_FetchLogGroups_NilTokenWhenNoMore(t *testing.T) {
+	m := NewModel(nil)
+
+	m, _ = update(m, logGroupsPageMsg{
+		groups:    []aws.LogGroup{{Name: "group-1"}},
+		nextToken: nil,
+	})
+
+	if m.groupsNextToken != nil {
+		t.Errorf("expected nil groupsNextToken, got %v", m.groupsNextToken)
+	}
+}
+
+func TestModel_FetchLogStreams_StoresNextToken(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	token := "stream-token"
+
+	m, _ = update(m, logStreamsPageMsg{
+		streams:   []aws.LogStream{{Name: "s1"}},
+		nextToken: &token,
+	})
+
+	if len(m.logStreams) != 1 {
+		t.Fatalf("expected 1 stream, got %d", len(m.logStreams))
+	}
+	if m.streamsNextToken == nil || *m.streamsNextToken != token {
+		t.Errorf("expected streamsNextToken=%q, got %v", token, m.streamsNextToken)
+	}
+}
+
+func TestModel_MoreGroupsPage_AppendsToList(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = []aws.LogGroup{{Name: "group-1"}}
+	token := "page3"
+
+	m, _ = update(m, moreGroupsPageMsg{
+		groups:    []aws.LogGroup{{Name: "group-2"}, {Name: "group-3"}},
+		nextToken: &token,
+	})
+
+	if len(m.logGroups) != 3 {
+		t.Fatalf("expected 3 groups after append, got %d", len(m.logGroups))
+	}
+	if m.groupsNextToken == nil || *m.groupsNextToken != token {
+		t.Errorf("expected groupsNextToken=%q, got %v", token, m.groupsNextToken)
+	}
+}
+
+func TestModel_MoreStreamsPage_AppendsToList(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.logStreams = []aws.LogStream{{Name: "s1"}}
+
+	m, _ = update(m, moreStreamsPageMsg{
+		streams:   []aws.LogStream{{Name: "s2"}, {Name: "s3"}},
+		nextToken: nil,
+	})
+
+	if len(m.logStreams) != 3 {
+		t.Fatalf("expected 3 streams after append, got %d", len(m.logStreams))
+	}
+	if m.streamsNextToken != nil {
+		t.Errorf("expected nil streamsNextToken, got %v", m.streamsNextToken)
+	}
+}
+
+func TestModel_CursorAtBottom_TriggersMoreGroupsFetch(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(5)
+	token := "more"
+	m.groupsNextToken = &token
+	m.cursor = 3
+	m.width = 100
+	m.height = 24
+
+	// Move cursor to last item
+	m, cmd := update(m, keyMsg('G'))
+	if m.cursor != 4 {
+		t.Errorf("expected cursor 4, got %d", m.cursor)
+	}
+	// Should trigger a fetch for more groups
+	if cmd == nil {
+		t.Error("expected command to fetch more groups when cursor at bottom with more pages")
+	}
+}
+
+func TestModel_CursorAtBottom_NoFetchWhenNoToken(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(5)
+	m.groupsNextToken = nil
+	m.width = 100
+	m.height = 24
+
+	m, cmd := update(m, keyMsg('G'))
+	if cmd != nil {
+		t.Error("expected no command when no more pages")
+	}
+}
+
+func TestModel_CursorAtBottom_TriggersMoreStreamsFetch(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/test"
+	m.logStreams = makeStreams(5)
+	token := "more-streams"
+	m.streamsNextToken = &token
+	m.cursor = 3
+	m.width = 100
+	m.height = 24
+
+	m, cmd := update(m, keyMsg('G'))
+	if m.cursor != 4 {
+		t.Errorf("expected cursor 4, got %d", m.cursor)
+	}
+	if cmd == nil {
+		t.Error("expected command to fetch more streams when cursor at bottom with more pages")
 	}
 }
 

@@ -71,3 +71,17 @@
 ## ペインサイズ不一致修正 (#3)
 - [x] 2026-04-14 ペイン高さ/幅テスト作成（5テスト）
 - [x] 2026-04-14 render関数の末尾改行によるHeight超過を修正（strings.TrimRight）
+
+## WSLペインサイズ不一致修正 (#6)
+- [x] 2026-04-14 render関数のmaxHeightパディングテスト作成（2テスト）
+- [x] 2026-04-14 render関数でmaxHeight行にパディング + lipgloss Height()依存を除去
+
+## WSLレイアウト崩れ根本修正 (#7, #8)
+- [x] 2026-04-14 strings.TrimRight→TrimSuffixに変更（パディング全除去を防止）
+- [x] 2026-04-14 lipgloss JoinHorizontal/JoinVerticalを廃止、行ごとに直接出力組み立て
+- [x] 2026-04-14 最終出力をm.height-1行にハードキャップ
+
+## ページネーション修正 (F9)
+- [x] 2026-04-14 fetchLogGroups/fetchLogStreamsをPage API対応に変更（NextToken返却）
+- [x] 2026-04-14 カーソル末尾到達時に次ページを非同期追加取得（maybeFetchMore）
+- [x] 2026-04-14 追加ページはリストにappend（既存データを保持）

@@ -18,7 +18,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 		m.adjustOffset()
-		return m, nil
+		return m, m.maybeFetchMore()
 	case tea.KeyUp:
 		if m.cursor > 0 {
 			m.cursor--
@@ -52,7 +52,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 			m.adjustOffset()
-			return m, nil
+			return m, m.maybeFetchMore()
 		case "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -68,7 +68,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor = listLen - 1
 			}
 			m.adjustOffset()
-			return m, nil
+			return m, m.maybeFetchMore()
 		case "l":
 			return m.navigateForward()
 		case "h":

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -736,4 +737,302 @@ func TestModel_SearchThenNavigate_GroupCursorPointsToCorrectGroup(t *testing.T) 
 	if m.groupCursor != 1 {
 		t.Errorf("expected groupCursor=1 (index of /aws/ecs/service-b in unfiltered list), got %d", m.groupCursor)
 	}
+}
+
+// --- Scroll / Viewport ---
+
+func makeGroups(n int) []aws.LogGroup {
+	groups := make([]aws.LogGroup, n)
+	for i := range groups {
+		groups[i] = aws.LogGroup{Name: fmt.Sprintf("/aws/lambda/func-%03d", i)}
+	}
+	return groups
+}
+
+func makeStreams(n int) []aws.LogStream {
+	streams := make([]aws.LogStream, n)
+	for i := range streams {
+		streams[i] = aws.LogStream{
+			Name:               fmt.Sprintf("stream-%03d", i),
+			LastEventTimestamp: time.Now().Add(-time.Duration(i) * time.Minute),
+		}
+	}
+	return streams
+}
+
+func TestModel_ScrollOffset_InitiallyZero(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+
+	if m.offset != 0 {
+		t.Errorf("expected initial offset 0, got %d", m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_CursorDownScrollsViewport(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.width = 100
+	m.height = 12 // contentHeight = 12-3 = 9, visible items = 9-1(header) = 8
+
+	// Move cursor to bottom of visible area
+	for i := 0; i < 8; i++ {
+		m, _ = update(m, keyMsg('j'))
+	}
+
+	// Cursor should be at 8, offset should have scrolled to keep cursor visible
+	if m.cursor != 8 {
+		t.Errorf("expected cursor 8, got %d", m.cursor)
+	}
+	if m.offset < 1 {
+		t.Errorf("expected offset >= 1 when cursor passes visible area, got %d", m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_CursorUpScrollsBack(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.width = 100
+	m.height = 12
+	m.cursor = 20
+	m.offset = 15
+
+	// Move cursor up past the offset
+	for i := 0; i < 6; i++ {
+		m, _ = update(m, keyMsg('k'))
+	}
+
+	// Cursor at 14, offset should have scrolled back
+	if m.cursor != 14 {
+		t.Errorf("expected cursor 14, got %d", m.cursor)
+	}
+	if m.offset > m.cursor {
+		t.Errorf("expected offset <= cursor (%d), got %d", m.cursor, m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_GJumpsToTopResetsOffset(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.width = 100
+	m.height = 12
+	m.cursor = 30
+	m.offset = 25
+
+	m, _ = update(m, keyMsg('g'))
+	if m.cursor != 0 {
+		t.Errorf("expected cursor 0 after g, got %d", m.cursor)
+	}
+	if m.offset != 0 {
+		t.Errorf("expected offset 0 after g, got %d", m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_GJumpsToBottomAdjustsOffset(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.width = 100
+	m.height = 12 // visible items = 8
+
+	m, _ = update(m, keyMsg('G'))
+	if m.cursor != 49 {
+		t.Errorf("expected cursor 49 after G, got %d", m.cursor)
+	}
+	// offset should place cursor within visible range
+	if m.offset < 42 {
+		t.Errorf("expected offset >= 42 to keep cursor 49 visible, got %d", m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_RenderShowsItemsFromOffset(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.width = 100
+	m.height = 12
+	m.cursor = 20
+	m.offset = 18
+
+	view := m.View()
+	// Items at offset 18, 19, 20 should be visible
+	if !strings.Contains(view, "func-018") {
+		t.Error("expected func-018 to be visible at offset 18")
+	}
+	if !strings.Contains(view, "func-020") {
+		t.Error("expected func-020 (cursor) to be visible")
+	}
+	// Item before offset should NOT be visible
+	if strings.Contains(view, "func-000") {
+		t.Error("expected func-000 to NOT be visible when offset is 18")
+	}
+}
+
+func TestModel_ScrollOffset_StreamViewScrolls(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/test"
+	m.logStreams = makeStreams(50)
+	m.width = 120
+	m.height = 12
+
+	// Move cursor down past visible area
+	for i := 0; i < 10; i++ {
+		m, _ = update(m, keyMsg('j'))
+	}
+
+	if m.cursor != 10 {
+		t.Errorf("expected cursor 10, got %d", m.cursor)
+	}
+	if m.offset < 3 {
+		t.Errorf("expected offset >= 3 for streams scroll, got %d", m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_ResetOnViewChange(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.width = 100
+	m.height = 12
+	m.cursor = 20
+	m.offset = 15
+
+	// Navigate forward to streams
+	m, _ = update(m, keyMsg('l'))
+	if m.offset != 0 {
+		t.Errorf("expected offset reset to 0 on view change, got %d", m.offset)
+	}
+}
+
+func TestModel_ScrollOffset_ResetOnNavigateBack(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.logGroups = makeGroups(5)
+	m.logStreams = makeStreams(50)
+	m.selectedGroup = "/aws/test"
+	m.groupCursor = 2
+	m.cursor = 20
+	m.offset = 15
+
+	m, _ = update(m, keyMsg('h'))
+	// offset should be adjusted for the restored groupCursor
+	if m.offset > m.cursor {
+		t.Errorf("expected offset <= cursor after navigate back, got offset=%d cursor=%d", m.offset, m.cursor)
+	}
+}
+
+func TestModel_ScrollOffset_InactiveGroupListScrolls(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = makeGroups(50)
+	m.currentView = viewStreams
+	m.selectedGroup = m.logGroups[45].Name
+	m.groupCursor = 45
+	m.logStreams = makeStreams(3)
+	m.width = 100
+	m.height = 12
+
+	view := m.View()
+	// The inactive group list should show the selected group
+	if !strings.Contains(view, "func-045") {
+		t.Error("expected func-045 to be visible in inactive group list")
+	}
+}
+
+// --- Pane height consistency (#3) ---
+
+// countRenderedLines returns the number of lines in a rendered View output.
+func countRenderedLines(view string) int {
+	return len(strings.Split(view, "\n"))
+}
+
+func TestModel_PaneHeight_BothPanesSameHeight(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 24
+	m.logGroups = makeGroups(5) // few groups
+	// no streams loaded
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Total rendered lines should not exceed terminal height
+	if len(lines) > m.height {
+		t.Errorf("rendered %d lines but terminal height is %d", len(lines), m.height)
+	}
+}
+
+func TestModel_PaneHeight_FewGroupsManyStreams(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 24
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/test"
+	m.logGroups = makeGroups(3)  // few groups
+	m.logStreams = makeStreams(50) // many streams
+	m.groupCursor = 0
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	if len(lines) > m.height {
+		t.Errorf("rendered %d lines but terminal height is %d", len(lines), m.height)
+	}
+}
+
+func TestModel_PaneHeight_ManyGroupsFewStreams(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 24
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/test"
+	m.logGroups = makeGroups(50) // many groups
+	m.logStreams = makeStreams(2) // few streams
+	m.groupCursor = 0
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	if len(lines) > m.height {
+		t.Errorf("rendered %d lines but terminal height is %d", len(lines), m.height)
+	}
+}
+
+func TestModel_PaneWidth_TotalFitsTerminal(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 24
+	m.logGroups = makeGroups(5)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	for i, line := range lines {
+		// Use RuneCount for visual width approximation (box-drawing chars are single-width)
+		w := runeWidth(line)
+		if w > m.width {
+			t.Errorf("line %d: visual width %d exceeds terminal width %d", i, w, m.width)
+		}
+	}
+}
+
+func TestModel_PaneWidth_TotalFitsTerminal_OddWidth(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 101 // odd width to test rounding
+	m.height = 24
+	m.logGroups = makeGroups(5)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	for i, line := range lines {
+		w := runeWidth(line)
+		if w > m.width {
+			t.Errorf("line %d: visual width %d exceeds terminal width %d", i, w, m.width)
+		}
+	}
+}
+
+// runeWidth counts the visual width of a string.
+// East Asian wide characters would need special handling, but
+// box-drawing characters are single-width.
+func runeWidth(s string) int {
+	return len([]rune(s))
 }

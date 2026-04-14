@@ -51,6 +51,8 @@ type Model struct {
 	mode        inputMode
 	cursor      int
 	groupCursor int
+	offset      int // scroll offset for current active list
+	groupOffset int // scroll offset for group list (preserved when viewing streams)
 
 	logGroups     []aws.LogGroup
 	logStreams    []aws.LogStream
@@ -139,6 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logStreams = []aws.LogStream(msg)
 		m.loading = false
 		m.cursor = 0
+		m.offset = 0
 		return m, nil
 
 	case logEventsMsg:
@@ -211,6 +214,35 @@ func (m Model) fetchMultiLogEvents(groupName string, streamNames []string) tea.C
 			return errMsg{err}
 		}
 		return logEventsMsg(events)
+	}
+}
+
+// visibleItems returns the number of list items visible in a pane.
+// It accounts for the header line and status bar.
+func (m Model) visibleItems() int {
+	contentHeight := m.height - 3
+	if m.mode != modeNormal {
+		contentHeight--
+	}
+	// Subtract 1 for the header line ("Log Groups\n" / "Streams — ...\n")
+	visible := contentHeight - 1
+	if visible < 1 {
+		return 1
+	}
+	return visible
+}
+
+// adjustOffset ensures the cursor is within the visible viewport.
+func (m *Model) adjustOffset() {
+	visible := m.visibleItems()
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.cursor >= m.offset+visible {
+		m.offset = m.cursor - visible + 1
+	}
+	if m.offset < 0 {
+		m.offset = 0
 	}
 }
 

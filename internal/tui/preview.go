@@ -97,8 +97,8 @@ func (m Model) viewTwoColumn() string {
 		rightCol = m.renderStreamList(contentHeight)
 	}
 
-	left := leftStyle.Render(leftCol)
-	right := rightStyle.Render(rightCol)
+	left := leftStyle.Render(strings.TrimRight(leftCol, "\n"))
+	right := rightStyle.Render(strings.TrimRight(rightCol, "\n"))
 
 	main := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
@@ -117,15 +117,18 @@ func (m Model) viewTwoColumn() string {
 func (m Model) renderGroupList(maxHeight int) string {
 	var b strings.Builder
 	b.WriteString("Log Groups\n")
-	for i, g := range m.filteredGroups() {
-		if i >= maxHeight-1 {
-			break
-		}
+	groups := m.filteredGroups()
+	visible := maxHeight - 1
+	end := m.offset + visible
+	if end > len(groups) {
+		end = len(groups)
+	}
+	for i := m.offset; i < end; i++ {
 		cursor := " "
 		if i == m.cursor {
 			cursor = ">"
 		}
-		b.WriteString(fmt.Sprintf("%s %s\n", cursor, g.Name))
+		b.WriteString(fmt.Sprintf("%s %s\n", cursor, groups[i].Name))
 	}
 	return b.String()
 }
@@ -133,15 +136,26 @@ func (m Model) renderGroupList(maxHeight int) string {
 func (m Model) renderGroupListInactive(maxHeight int) string {
 	var b strings.Builder
 	b.WriteString("Log Groups\n")
-	for i, g := range m.logGroups {
-		if i >= maxHeight-1 {
-			break
-		}
+	visible := maxHeight - 1
+	// Use groupOffset to scroll the inactive list to show the selected group
+	offset := m.groupOffset
+	// Ensure the groupCursor is visible
+	if m.groupCursor < offset {
+		offset = m.groupCursor
+	}
+	if m.groupCursor >= offset+visible {
+		offset = m.groupCursor - visible + 1
+	}
+	end := offset + visible
+	if end > len(m.logGroups) {
+		end = len(m.logGroups)
+	}
+	for i := offset; i < end; i++ {
 		cursor := " "
 		if i == m.groupCursor {
 			cursor = ">"
 		}
-		b.WriteString(fmt.Sprintf("%s %s\n", cursor, g.Name))
+		b.WriteString(fmt.Sprintf("%s %s\n", cursor, m.logGroups[i].Name))
 	}
 	return b.String()
 }
@@ -153,10 +167,18 @@ func (m Model) renderStreamList(maxHeight int) string {
 	} else {
 		b.WriteString("Streams\n")
 	}
-	for i, s := range m.sortedStreams(m.filteredStreams()) {
-		if i >= maxHeight-1 {
-			break
-		}
+	streams := m.sortedStreams(m.filteredStreams())
+	visible := maxHeight - 1
+	offset := 0
+	if m.currentView == viewStreams {
+		offset = m.offset
+	}
+	end := offset + visible
+	if end > len(streams) {
+		end = len(streams)
+	}
+	for i := offset; i < end; i++ {
+		s := streams[i]
 		cursor := " "
 		if i == m.cursor {
 			cursor = ">"

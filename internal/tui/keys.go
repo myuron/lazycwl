@@ -17,11 +17,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < listLen-1 {
 			m.cursor++
 		}
+		m.adjustOffset()
 		return m, nil
 	case tea.KeyUp:
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.adjustOffset()
 		return m, nil
 	case tea.KeyEnter, tea.KeyRight:
 		return m.navigateForward()
@@ -49,19 +51,23 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor < listLen-1 {
 				m.cursor++
 			}
+			m.adjustOffset()
 			return m, nil
 		case "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			m.adjustOffset()
 			return m, nil
 		case "g":
 			m.cursor = 0
+			m.offset = 0
 			return m, nil
 		case "G":
 			if listLen > 0 {
 				m.cursor = listLen - 1
 			}
+			m.adjustOffset()
 			return m, nil
 		case "l":
 			return m.navigateForward()
@@ -71,6 +77,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeSearch
 			m.searchQuery = ""
 			m.cursor = 0
+			m.offset = 0
 			return m, nil
 		case "t":
 			m.mode = modeTimeInput
@@ -80,6 +87,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.currentView == viewStreams {
 				m.sortByName = !m.sortByName
 				m.cursor = 0
+				m.offset = 0
 			}
 			return m, nil
 		case "q":
@@ -99,6 +107,7 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeNormal
 		m.searchQuery = ""
 		m.cursor = 0
+		m.offset = 0
 		return m, nil
 	case tea.KeyEnter:
 		m.mode = modeNormal
@@ -107,11 +116,13 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if r := []rune(m.searchQuery); len(r) > 0 {
 			m.searchQuery = string(r[:len(r)-1])
 			m.cursor = 0
+			m.offset = 0
 		}
 		return m, nil
 	case tea.KeyRunes:
 		m.searchQuery += string(msg.Runes)
 		m.cursor = 0
+		m.offset = 0
 		return m, nil
 	}
 	return m, nil

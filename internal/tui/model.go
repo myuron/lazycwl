@@ -25,11 +25,29 @@ const (
 	modeTimeInput
 )
 
-// logGroupsMsg is sent when log groups are fetched.
-type logGroupsMsg []aws.LogGroup
+// logGroupsPageMsg is sent when the first page of log groups is fetched.
+type logGroupsPageMsg struct {
+	groups    []aws.LogGroup
+	nextToken *string
+}
 
-// logStreamsMsg is sent when log streams are fetched.
-type logStreamsMsg []aws.LogStream
+// logStreamsPageMsg is sent when the first page of log streams is fetched.
+type logStreamsPageMsg struct {
+	streams   []aws.LogStream
+	nextToken *string
+}
+
+// moreGroupsPageMsg is sent when additional pages of log groups are fetched.
+type moreGroupsPageMsg struct {
+	groups    []aws.LogGroup
+	nextToken *string
+}
+
+// moreStreamsPageMsg is sent when additional pages of log streams are fetched.
+type moreStreamsPageMsg struct {
+	streams   []aws.LogStream
+	nextToken *string
+}
 
 // logEventsMsg is sent when log events are fetched.
 type logEventsMsg []aws.LogEvent
@@ -67,8 +85,9 @@ type Model struct {
 	groupsNextToken  *string
 	streamsNextToken *string
 
-	loading bool
-	err     error
+	loading    bool
+	loadingMore bool
+	err        error
 
 	width  int
 	height int
@@ -132,16 +151,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 
-	case logGroupsMsg:
-		m.logGroups = []aws.LogGroup(msg)
+	case logGroupsPageMsg:
+		m.logGroups = msg.groups
+		m.groupsNextToken = msg.nextToken
 		m.loading = false
 		return m, nil
 
-	case logStreamsMsg:
-		m.logStreams = []aws.LogStream(msg)
+	case logStreamsPageMsg:
+		m.logStreams = msg.streams
+		m.streamsNextToken = msg.nextToken
 		m.loading = false
 		m.cursor = 0
 		m.offset = 0
+		return m, nil
+
+	case moreGroupsPageMsg:
+		m.logGroups = append(m.logGroups, msg.groups...)
+		m.groupsNextToken = msg.nextToken
+		m.loadingMore = false
+		return m, nil
+
+	case moreStreamsPageMsg:
+		m.logStreams = append(m.logStreams, msg.streams...)
+		m.streamsNextToken = msg.nextToken
+		m.loadingMore = false
 		return m, nil
 
 	case logEventsMsg:
@@ -175,21 +208,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) fetchLogGroups() tea.Cmd {
 	return func() tea.Msg {
-		groups, err := m.client.ListLogGroups(m.ctx)
+		groups, nextToken, err := m.client.ListLogGroupsPage(m.ctx, nil)
 		if err != nil {
 			return errMsg{err}
 		}
-		return logGroupsMsg(groups)
+		return logGroupsPageMsg{groups: groups, nextToken: nextToken}
+	}
+}
+
+func (m Model) fetchMoreGroups() tea.Cmd {
+	token := m.groupsNextToken
+	return func() tea.Msg {
+		groups, nextToken, err := m.client.ListLogGroupsPage(m.ctx, token)
+		if err != nil {
+			return errMsg{err}
+		}
+		return moreGroupsPageMsg{groups: groups, nextToken: nextToken}
 	}
 }
 
 func (m Model) fetchLogStreams(groupName string) tea.Cmd {
 	return func() tea.Msg {
-		streams, err := m.client.ListLogStreams(m.ctx, groupName)
+		streams, nextToken, err := m.client.ListLogStreamsPage(m.ctx, groupName, nil)
 		if err != nil {
 			return errMsg{err}
 		}
-		return logStreamsMsg(streams)
+		return logStreamsPageMsg{streams: streams, nextToken: nextToken}
+	}
+}
+
+func (m Model) fetchMoreStreams() tea.Cmd {
+	token := m.streamsNextToken
+	groupName := m.selectedGroup
+	return func() tea.Msg {
+		streams, nextToken, err := m.client.ListLogStreamsPage(m.ctx, groupName, token)
+		if err != nil {
+			return errMsg{err}
+		}
+		return moreStreamsPageMsg{streams: streams, nextToken: nextToken}
 	}
 }
 
@@ -252,6 +308,27 @@ func (m Model) hasMoreGroups() bool {
 
 func (m Model) hasMoreStreams() bool {
 	return m.streamsNextToken != nil
+}
+
+// maybeFetchMore returns a command to fetch the next page if the cursor
+// is at the last item and more pages are available.
+func (m *Model) maybeFetchMore() tea.Cmd {
+	if m.loadingMore {
+		return nil
+	}
+	switch m.currentView {
+	case viewGroups:
+		if m.hasMoreGroups() && m.cursor >= len(m.logGroups)-1 {
+			m.loadingMore = true
+			return m.fetchMoreGroups()
+		}
+	case viewStreams:
+		if m.hasMoreStreams() && m.cursor >= len(m.logStreams)-1 {
+			m.loadingMore = true
+			return m.fetchMoreStreams()
+		}
+	}
+	return nil
 }
 
 func (m Model) openEditor(events []aws.LogEvent) tea.Cmd {

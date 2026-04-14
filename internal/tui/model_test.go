@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -284,9 +285,9 @@ func TestModel_DefaultSinceDuration(t *testing.T) {
 	}
 }
 
-func TestModel_ViewThreeColumns_GroupsView(t *testing.T) {
+func TestModel_ViewTwoColumns_GroupsView(t *testing.T) {
 	m := NewModel(nil)
-	m.width = 80
+	m.width = 100
 	m.height = 24
 	m.logGroups = []aws.LogGroup{
 		{Name: "/aws/lambda/func-a", RetentionDays: 30, StoredBytes: 1024},
@@ -298,11 +299,18 @@ func TestModel_ViewThreeColumns_GroupsView(t *testing.T) {
 	if view == "" {
 		t.Error("expected non-empty view")
 	}
+	if !strings.Contains(view, "Log Groups") {
+		t.Error("expected 'Log Groups' header in left pane")
+	}
+	if !strings.Contains(view, "Streams") {
+		t.Error("expected 'Streams' header in right pane")
+	}
 }
 
-func TestModel_ViewThreeColumns_StreamsView(t *testing.T) {
+func TestModel_ViewTwoColumns_StreamsView(t *testing.T) {
+	ts := time.Date(2024, 1, 15, 9, 30, 0, 0, time.UTC)
 	m := NewModel(nil)
-	m.width = 80
+	m.width = 120
 	m.height = 24
 	m.currentView = viewStreams
 	m.selectedGroup = "/aws/lambda/func-a"
@@ -311,8 +319,8 @@ func TestModel_ViewThreeColumns_StreamsView(t *testing.T) {
 		{Name: "/aws/ecs/service-b"},
 	}
 	m.logStreams = []aws.LogStream{
-		{Name: "stream-001", LastEventTimestamp: time.Now()},
-		{Name: "stream-002", LastEventTimestamp: time.Now()},
+		{Name: "stream-001", LastEventTimestamp: ts},
+		{Name: "stream-002", LastEventTimestamp: ts.Add(-time.Hour)},
 	}
 	m.cursor = 0
 	m.groupCursor = 0
@@ -320,6 +328,34 @@ func TestModel_ViewThreeColumns_StreamsView(t *testing.T) {
 	view := m.View()
 	if view == "" {
 		t.Error("expected non-empty view")
+	}
+	// Right pane should show Last Event timestamps
+	if !strings.Contains(view, "09:30:00") {
+		t.Error("expected Last Event time '09:30:00' in streams pane")
+	}
+	if !strings.Contains(view, "08:30:00") {
+		t.Error("expected Last Event time '08:30:00' in streams pane")
+	}
+}
+
+func TestModel_ViewTwoColumns_StreamsShowLastEvent(t *testing.T) {
+	ts := time.Date(2024, 3, 20, 14, 5, 30, 0, time.UTC)
+	m := NewModel(nil)
+	m.width = 120
+	m.height = 24
+	m.currentView = viewStreams
+	m.selectedGroup = "/test/group"
+	m.logStreams = []aws.LogStream{
+		{Name: "my-stream", LastEventTimestamp: ts},
+	}
+	m.cursor = 0
+
+	view := m.View()
+	if !strings.Contains(view, "my-stream") {
+		t.Error("expected stream name in view")
+	}
+	if !strings.Contains(view, "2024-03-20 14:05:30") {
+		t.Error("expected Last Event timestamp '2024-03-20 14:05:30' next to stream name")
 	}
 }
 
@@ -553,21 +589,21 @@ func TestModel_MultiSelect_SpaceToggles(t *testing.T) {
 	}
 	m.cursor = 0
 
-	// Space selects current stream
-	m, _ = update(m, keyMsg(' '))
+	// Space selects current stream (use KeySpace, matching real terminal input)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeySpace})
 	if !m.selected["stream-001"] {
 		t.Error("expected stream-001 to be selected")
 	}
 
 	// Move down and select another
 	m, _ = update(m, keyMsg('j'))
-	m, _ = update(m, keyMsg(' '))
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeySpace})
 	if !m.selected["stream-002"] {
 		t.Error("expected stream-002 to be selected")
 	}
 
 	// Space again deselects
-	m, _ = update(m, keyMsg(' '))
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeySpace})
 	if m.selected["stream-002"] {
 		t.Error("expected stream-002 to be deselected")
 	}
@@ -616,7 +652,7 @@ func TestModel_SpaceOnlyWorksInStreamsView(t *testing.T) {
 	m.logGroups = []aws.LogGroup{{Name: "g1"}}
 	m.cursor = 0
 
-	m, _ = update(m, keyMsg(' '))
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeySpace})
 	if m.selected != nil && len(m.selected) > 0 {
 		t.Error("space should not select in groups view")
 	}

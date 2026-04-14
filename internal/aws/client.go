@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
+
+// maxConcurrentStreams limits the number of concurrent GetLogEvents API calls.
+const maxConcurrentStreams = 5
 
 // LogsClient is the interface for CloudWatch Logs API operations.
 type LogsClient interface {
@@ -69,10 +73,7 @@ func NewClient(ctx context.Context, profile, region string) (*Client, error) {
 }
 
 func endpointURL() string {
-	if v := os.Getenv("AWS_ENDPOINT_URL"); v != "" {
-		return v
-	}
-	return ""
+	return os.Getenv("AWS_ENDPOINT_URL")
 }
 
 // ListLogGroupsPage returns one page of log groups with the given token.
@@ -176,29 +177,89 @@ func (c *Client) ListLogStreams(ctx context.Context, logGroupName string) ([]Log
 	return streams, nil
 }
 
-// GetLogEvents returns log events for a given log group and stream within the specified time range.
+// GetLogEvents returns all log events for a given log group and stream within
+// the specified time range, handling pagination automatically.
 func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName string, startTime, endTime time.Time) ([]LogEvent, error) {
-	out, err := c.api.GetLogEvents(ctx, &cloudwatchlogs.GetLogEventsInput{
+	var allEvents []LogEvent
+	var prevToken string
+
+	input := &cloudwatchlogs.GetLogEventsInput{
 		LogGroupName:  awssdk.String(logGroupName),
 		LogStreamName: awssdk.String(logStreamName),
 		StartTime:     awssdk.Int64(startTime.UnixMilli()),
 		EndTime:       awssdk.Int64(endTime.UnixMilli()),
 		StartFromHead: awssdk.Bool(true),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("getting log events: %w", err)
 	}
 
-	events := make([]LogEvent, 0, len(out.Events))
-	for _, e := range out.Events {
-		var ts time.Time
-		if e.Timestamp != nil {
-			ts = time.UnixMilli(*e.Timestamp)
+	for {
+		out, err := c.api.GetLogEvents(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("getting log events: %w", err)
 		}
-		events = append(events, LogEvent{
-			Timestamp: ts,
-			Message:   awssdk.ToString(e.Message),
-		})
+
+		for _, e := range out.Events {
+			var ts time.Time
+			if e.Timestamp != nil {
+				ts = time.UnixMilli(*e.Timestamp)
+			}
+			allEvents = append(allEvents, LogEvent{
+				Timestamp: ts,
+				Message:   awssdk.ToString(e.Message),
+			})
+		}
+
+		// GetLogEvents signals end-of-stream by returning the same
+		// NextForwardToken as the previous call, or an empty page with
+		// no new token.
+		nextToken := awssdk.ToString(out.NextForwardToken)
+		if nextToken == "" || nextToken == prevToken || len(out.Events) == 0 {
+			break
+		}
+		prevToken = nextToken
+		input.NextToken = out.NextForwardToken
 	}
-	return events, nil
+
+	return allEvents, nil
+}
+
+// GetMultiStreamLogEvents fetches log events from multiple streams concurrently,
+// limiting parallelism to maxConcurrentStreams.
+func (c *Client) GetMultiStreamLogEvents(ctx context.Context, logGroupName string, streamNames []string, startTime, endTime time.Time) ([]LogEvent, error) {
+	results := make([][]LogEvent, len(streamNames))
+	var mu sync.Mutex
+	var firstErr error
+	var wg sync.WaitGroup
+
+	sem := make(chan struct{}, maxConcurrentStreams)
+
+	for i, name := range streamNames {
+		wg.Add(1)
+		go func(idx int, streamName string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			events, err := c.GetLogEvents(ctx, logGroupName, streamName, startTime, endTime)
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+			results[idx] = events
+		}(i, name)
+	}
+	wg.Wait()
+
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	var allEvents []LogEvent
+	for _, events := range results {
+		allEvents = append(allEvents, events...)
+	}
+	return allEvents, nil
 }

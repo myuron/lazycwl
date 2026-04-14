@@ -45,3 +45,19 @@
 
 ## バグ修正
 - [x] 2026-04-13 検索経由でログストリームに移動した際、groupCursorがフィルタ済みインデックスを保存していたバグを修正
+
+## コードレビュー指摘事項
+- [x] 2026-04-13 cmd/lazycwl/main.go が存在しない — 確認の結果、存在していた（誤検知）
+- [x] 2026-04-13 go.mod: 直接依存が全て // indirect になっている — go mod tidy で修正
+- [x] 2026-04-13 client.go: endpointURL() が冗長 — os.Getenv を直接返すように簡略化
+- [x] 2026-04-13 model.go: fetchMultiLogEvents が逐次API呼び出し — sync.WaitGroup で並行取得に変更
+- [x] 2026-04-13 model.go: fetchLogGroups等で context.Background() をハードコード — Model にctx/cancelを保持、quit時にcancel呼び出し
+- [x] 2026-04-13 model.go: 700行超の単一ファイル — groups.go/streams.go/preview.go/keys.go に分割
+- [x] 2026-04-13 CLI引数パース部分のコード・テストが不在 — 確認の結果、main.goに実装済み（誤検知）
+- [x] 2026-04-13 acceptance_test.go: execCmd の再帰がエディタ起動を防いでいない — tea.ExecMsg をスキップするガード追加
+- [x] 2026-04-13 searchQuery のバックスペースがバイト単位 — rune単位の削除に修正（timeInputも同様）
+- [x] 2026-04-14 parseDuration に負の値・ゼロの検証がない — num <= 0 をエラーにするバリデーション追加（TUI側・CLI側両方）
+- [x] 2026-04-14 Spaceキー（複数選択トグル）が tea.KeySpace で届くのに tea.KeyRunes でハンドルしていた — KeySpace ケースを追加
+- [x] 2026-04-14 3カラムレイアウト → 2カラム（左: LogGroups、右: LogStreams + Last Event）に変更
+- [x] 2026-04-14 GetLogEvents にページネーション追加（NextForwardToken をループして全イベント取得）
+- [x] 2026-04-14 複数ストリーム並行取得の並行数制限（セマフォで最大5並行）+ GetMultiStreamLogEvents をawsパッケージに移動

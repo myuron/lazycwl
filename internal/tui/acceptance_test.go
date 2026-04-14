@@ -33,6 +33,7 @@ func updateModel(m Model, msg tea.Msg) (Model, tea.Cmd) {
 }
 
 // execCmd runs a tea.Cmd synchronously and feeds the result back into Update.
+// It skips tea.ExecProcess commands (editor launch) to avoid spawning processes in tests.
 func execCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
 	if cmd == nil {
@@ -40,6 +41,10 @@ func execCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
 	}
 	msg := cmd()
 	if msg == nil {
+		return m
+	}
+	// Skip editor process execution in tests
+	if _, ok := msg.(tea.ExecMsg); ok {
 		return m
 	}
 	// Handle tea.BatchMsg (multiple commands batched together)

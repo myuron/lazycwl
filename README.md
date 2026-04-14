@@ -5,14 +5,14 @@ AWS CloudWatch Logsをターミナルで素早く閲覧・調査するためのT
 ## インストール
 
 ```bash
-go install github.com/myuron/lazycwl/cmd/lazycwl@latest
+go install github.com/myuron/lazycwl@latest
 ```
 
 または Nix Flake 経由:
 
 ```bash
 nix develop  # 開発環境
-go build -o lazycwl ./cmd/lazycwl/
+go build -o lazycwl .
 ```
 
 ## 使い方
@@ -82,7 +82,7 @@ AWS_ENDPOINT_URL=http://localhost:4566 \
 AWS_ACCESS_KEY_ID=test \
 AWS_SECRET_ACCESS_KEY=test \
 AWS_DEFAULT_REGION=ap-northeast-1 \
-go run ./cmd/lazycwl/
+go run .
 ```
 
 ### テストデータの内容

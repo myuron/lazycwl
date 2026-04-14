@@ -69,13 +69,11 @@ func (m Model) viewTwoColumn() string {
 
 	leftStyle := lipgloss.NewStyle().
 		Width(leftWidth - 2).
-		Height(contentHeight).
 		Padding(0, 1).
 		BorderStyle(lipgloss.RoundedBorder())
 
 	rightStyle := lipgloss.NewStyle().
 		Width(rightWidth - 2).
-		Height(contentHeight).
 		Padding(0, 1).
 		BorderStyle(lipgloss.RoundedBorder())
 
@@ -123,12 +121,18 @@ func (m Model) renderGroupList(maxHeight int) string {
 	if end > len(groups) {
 		end = len(groups)
 	}
+	lines := 1 // header
 	for i := m.offset; i < end; i++ {
 		cursor := " "
 		if i == m.cursor {
 			cursor = ">"
 		}
 		b.WriteString(fmt.Sprintf("%s %s\n", cursor, groups[i].Name))
+		lines++
+	}
+	for lines < maxHeight {
+		b.WriteString("\n")
+		lines++
 	}
 	return b.String()
 }
@@ -150,12 +154,18 @@ func (m Model) renderGroupListInactive(maxHeight int) string {
 	if end > len(m.logGroups) {
 		end = len(m.logGroups)
 	}
+	lines := 1 // header
 	for i := offset; i < end; i++ {
 		cursor := " "
 		if i == m.groupCursor {
 			cursor = ">"
 		}
 		b.WriteString(fmt.Sprintf("%s %s\n", cursor, m.logGroups[i].Name))
+		lines++
+	}
+	for lines < maxHeight {
+		b.WriteString("\n")
+		lines++
 	}
 	return b.String()
 }
@@ -177,6 +187,7 @@ func (m Model) renderStreamList(maxHeight int) string {
 	if end > len(streams) {
 		end = len(streams)
 	}
+	lines := 1 // header
 	for i := offset; i < end; i++ {
 		s := streams[i]
 		cursor := " "
@@ -189,6 +200,11 @@ func (m Model) renderStreamList(maxHeight int) string {
 		}
 		lastEvent := s.LastEventTimestamp.Format("2006-01-02 15:04:05")
 		b.WriteString(fmt.Sprintf("%s%s %s  %s\n", cursor, mark, s.Name, lastEvent))
+		lines++
+	}
+	for lines < maxHeight {
+		b.WriteString("\n")
+		lines++
 	}
 	return b.String()
 }

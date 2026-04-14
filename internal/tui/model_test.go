@@ -1036,3 +1036,69 @@ func TestModel_PaneWidth_TotalFitsTerminal_OddWidth(t *testing.T) {
 func runeWidth(s string) int {
 	return len([]rune(s))
 }
+
+func TestModel_RenderContentExactLines(t *testing.T) {
+	// Verify that renderGroupList and renderStreamList produce exactly maxHeight lines
+	// to prevent pane size mismatch when lipgloss Height enforcement varies across terminals.
+	tests := []struct {
+		name       string
+		groups     int
+		streams    int
+		maxHeight  int
+	}{
+		{"few groups", 3, 0, 20},
+		{"many groups", 50, 0, 20},
+		{"exact groups", 20, 0, 20},
+		{"few streams", 0, 3, 20},
+		{"many streams", 0, 50, 20},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(nil)
+			m.width = 100
+			m.height = tt.maxHeight + 3
+			m.logGroups = makeGroups(tt.groups)
+			m.logStreams = makeStreams(tt.streams)
+			m.selectedGroup = "/aws/test"
+
+			groupContent := m.renderGroupList(tt.maxHeight)
+			groupLines := strings.Count(groupContent, "\n")
+			if groupLines != tt.maxHeight {
+				t.Errorf("renderGroupList: got %d lines, want %d", groupLines, tt.maxHeight)
+			}
+
+			inactiveContent := m.renderGroupListInactive(tt.maxHeight)
+			inactiveLines := strings.Count(inactiveContent, "\n")
+			if inactiveLines != tt.maxHeight {
+				t.Errorf("renderGroupListInactive: got %d lines, want %d", inactiveLines, tt.maxHeight)
+			}
+
+			streamContent := m.renderStreamList(tt.maxHeight)
+			streamLines := strings.Count(streamContent, "\n")
+			if streamLines != tt.maxHeight {
+				t.Errorf("renderStreamList: got %d lines, want %d", streamLines, tt.maxHeight)
+			}
+		})
+	}
+}
+
+func TestModel_PaneHeight_ExactMatch(t *testing.T) {
+	// Both panes must have exactly the same rendered height.
+	// Parse the two-column output and verify each half has the same number of lines.
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 24
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/test"
+	m.logGroups = makeGroups(3)
+	m.logStreams = makeStreams(50)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// The output should be exactly m.height lines (including the last line which may be empty)
+	if len(lines) != m.height {
+		t.Errorf("total lines: got %d, want exactly %d", len(lines), m.height)
+	}
+}

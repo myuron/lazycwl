@@ -953,9 +953,9 @@ func TestModel_PaneHeight_BothPanesSameHeight(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	// Total rendered lines should not exceed terminal height
-	if len(lines) > m.height {
-		t.Errorf("rendered %d lines but terminal height is %d", len(lines), m.height)
+	// Total rendered lines should be m.height-1 to leave room for cursor line
+	if len(lines) > m.height-1 {
+		t.Errorf("rendered %d lines but max is %d (terminal height %d - 1)", len(lines), m.height-1, m.height)
 	}
 }
 
@@ -972,8 +972,8 @@ func TestModel_PaneHeight_FewGroupsManyStreams(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	if len(lines) > m.height {
-		t.Errorf("rendered %d lines but terminal height is %d", len(lines), m.height)
+	if len(lines) > m.height-1 {
+		t.Errorf("rendered %d lines but max is %d (terminal height %d - 1)", len(lines), m.height-1, m.height)
 	}
 }
 
@@ -990,8 +990,8 @@ func TestModel_PaneHeight_ManyGroupsFewStreams(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	if len(lines) > m.height {
-		t.Errorf("rendered %d lines but terminal height is %d", len(lines), m.height)
+	if len(lines) > m.height-1 {
+		t.Errorf("rendered %d lines but max is %d (terminal height %d - 1)", len(lines), m.height-1, m.height)
 	}
 }
 
@@ -1085,7 +1085,6 @@ func TestModel_RenderContentExactLines(t *testing.T) {
 
 func TestModel_PaneHeight_ExactMatch(t *testing.T) {
 	// Both panes must have exactly the same rendered height.
-	// Parse the two-column output and verify each half has the same number of lines.
 	m := NewModel(nil)
 	m.width = 100
 	m.height = 24
@@ -1097,8 +1096,43 @@ func TestModel_PaneHeight_ExactMatch(t *testing.T) {
 	view := m.View()
 	lines := strings.Split(view, "\n")
 
-	// The output should be exactly m.height lines (including the last line which may be empty)
-	if len(lines) != m.height {
-		t.Errorf("total lines: got %d, want exactly %d", len(lines), m.height)
+	// Total should be m.height - 1 lines to prevent top cutoff on some terminals
+	if len(lines) != m.height-1 {
+		t.Errorf("total lines: got %d, want exactly %d", len(lines), m.height-1)
+	}
+}
+
+func TestModel_PaneHeight_FewItemsBothSides(t *testing.T) {
+	// When both panes have few items, they must still have the same height.
+	// This verifies padding survives TrimSuffix (not TrimRight which strips all).
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 24
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/test"
+	m.logGroups = makeGroups(3)
+	m.logStreams = makeStreams(2)
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Find pane border lines to measure pane heights
+	topBorderFound := false
+	bottomBorderCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "╭") {
+			topBorderFound = true
+		}
+		if strings.Contains(line, "╰") {
+			bottomBorderCount++
+		}
+	}
+	if !topBorderFound {
+		t.Error("top border not found")
+	}
+	// Both left and right pane bottom borders should be on the same line
+	// (JoinHorizontal places them side by side), so exactly 1 line with ╰
+	if bottomBorderCount != 1 {
+		t.Errorf("expected 1 bottom border line, got %d (panes have different heights)", bottomBorderCount)
 	}
 }

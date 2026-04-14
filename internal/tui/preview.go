@@ -62,7 +62,7 @@ func (m Model) viewSimple() string {
 func (m Model) viewTwoColumn() string {
 	leftWidth := m.width / 3
 	rightWidth := m.width - leftWidth
-	contentHeight := m.height - 3
+	contentHeight := m.height - 4
 	if m.mode != modeNormal {
 		contentHeight--
 	}
@@ -95,8 +95,8 @@ func (m Model) viewTwoColumn() string {
 		rightCol = m.renderStreamList(contentHeight)
 	}
 
-	left := leftStyle.Render(strings.TrimRight(leftCol, "\n"))
-	right := rightStyle.Render(strings.TrimRight(rightCol, "\n"))
+	left := leftStyle.Render(strings.TrimSuffix(leftCol, "\n"))
+	right := rightStyle.Render(strings.TrimSuffix(rightCol, "\n"))
 
 	main := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 

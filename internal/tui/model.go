@@ -220,7 +220,7 @@ func (m Model) fetchMultiLogEvents(groupName string, streamNames []string) tea.C
 // visibleItems returns the number of list items visible in a pane.
 // It accounts for the header line and status bar.
 func (m Model) visibleItems() int {
-	contentHeight := m.height - 3
+	contentHeight := m.height - 4
 	if m.mode != modeNormal {
 		contentHeight--
 	}

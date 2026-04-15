@@ -1,11 +1,6 @@
 package tui
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-	"time"
-
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -79,10 +74,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.offset = 0
 			return m, nil
-		case "t":
-			m.mode = modeTimeInput
-			m.timeInput = ""
-			return m, nil
 		case "s":
 			if m.currentView == viewStreams {
 				m.sortByName = !m.sortByName
@@ -128,56 +119,3 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleTimeInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEscape:
-		m.mode = modeNormal
-		m.timeInput = ""
-		return m, nil
-	case tea.KeyEnter:
-		if d, err := parseDuration(m.timeInput); err == nil {
-			m.sinceDuration = d
-		}
-		m.mode = modeNormal
-		m.timeInput = ""
-		return m, nil
-	case tea.KeyBackspace:
-		if r := []rune(m.timeInput); len(r) > 0 {
-			m.timeInput = string(r[:len(r)-1])
-		}
-		return m, nil
-	case tea.KeyRunes:
-		m.timeInput += string(msg.Runes)
-		return m, nil
-	}
-	return m, nil
-}
-
-// parseDuration parses durations like "30m", "2h", "7d".
-func parseDuration(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if len(s) < 2 {
-		return 0, fmt.Errorf("invalid duration: %s", s)
-	}
-
-	unit := s[len(s)-1]
-	numStr := s[:len(s)-1]
-	num, err := strconv.Atoi(numStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid duration number: %w", err)
-	}
-	if num <= 0 {
-		return 0, fmt.Errorf("duration must be positive: %d", num)
-	}
-
-	switch unit {
-	case 'm':
-		return time.Duration(num) * time.Minute, nil
-	case 'h':
-		return time.Duration(num) * time.Hour, nil
-	case 'd':
-		return time.Duration(num) * 24 * time.Hour, nil
-	default:
-		return 0, fmt.Errorf("unknown duration unit: %c", unit)
-	}
-}

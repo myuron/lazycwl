@@ -6,7 +6,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/myuron/lazycwl/internal/aws"
@@ -195,24 +194,6 @@ func TestAcceptance_TUI_SearchFilterStreams(t *testing.T) {
 	}
 }
 
-func TestAcceptance_TUI_TimeRangeChange(t *testing.T) {
-	m := newFlociModel(t)
-
-	cmd := m.Init()
-	m = execCmd(t, m, cmd)
-
-	// Change time range to 7d
-	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
-	for _, r := range "7d" {
-		m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.sinceDuration != 7*24*time.Hour {
-		t.Errorf("expected since 7d, got %v", m.sinceDuration)
-	}
-}
-
 func TestAcceptance_TUI_ViewRendersWithFlociData(t *testing.T) {
 	m := newFlociModel(t)
 	m.width = 120
@@ -292,8 +273,7 @@ func TestAcceptance_TUI_WithOptions_InitialGroup(t *testing.T) {
 	}
 
 	m := NewModelWithOptions(client, Options{
-		InitialGroup:  "/aws/ecs/web-service",
-		SinceDuration: 24 * time.Hour,
+		InitialGroup: "/aws/ecs/web-service",
 	})
 
 	// Should start in streams view

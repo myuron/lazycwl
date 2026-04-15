@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -49,12 +48,12 @@ func (m Model) viewSimple() string {
 			if m.selected[s.Name] {
 				mark = "*"
 			}
-			b.WriteString(fmt.Sprintf("%s%s %s (%s)\n", cursor, mark, s.Name, s.LastEventTimestamp.Format("2006-01-02 15:04:05")))
+			b.WriteString(fmt.Sprintf("%s%s %s (%s, %s)\n", cursor, mark, s.Name, s.LastEventTimestamp.Format("2006-01-02 15:04:05"), formatBytes(s.StoredBytes)))
 		}
 	}
 
 	b.WriteString(m.renderInputLine())
-	b.WriteString("\nq: quit | j/k: move | l: enter | h: back | /: search | t: time | s: sort")
+	b.WriteString("\nq: quit | j/k: move | l: enter | h: back | /: search | s: sort")
 
 	return b.String()
 }
@@ -234,7 +233,7 @@ func (m Model) renderStreamList(maxHeight int) string {
 			mark = "*"
 		}
 		lastEvent := s.LastEventTimestamp.Format("2006-01-02 15:04:05")
-		b.WriteString(fmt.Sprintf("%s%s %s  %s\n", cursor, mark, s.Name, lastEvent))
+		b.WriteString(fmt.Sprintf("%s%s %s  %s  %s\n", cursor, mark, s.Name, lastEvent, formatBytes(s.StoredBytes)))
 		lines++
 	}
 	for lines < maxHeight {
@@ -249,28 +248,33 @@ func (m Model) renderInputLine() string {
 	switch m.mode {
 	case modeSearch:
 		return fmt.Sprintf("/%s", m.searchQuery)
-	case modeTimeInput:
-		return fmt.Sprintf("Since: %s", m.timeInput)
 	}
 	return ""
 }
 
 func (m Model) renderStatusBar() string {
-	sinceStr := formatDuration(m.sinceDuration)
 	sortStr := "time ↓"
 	if m.sortByName {
 		sortStr = "name ↑"
 	}
-	return fmt.Sprintf(" Sort: %s | Since: %s | q: quit | /: search | t: time | s: sort", sortStr, sinceStr)
+	return fmt.Sprintf(" Sort: %s | q: quit | /: search | s: sort", sortStr)
 }
 
-func formatDuration(d time.Duration) string {
-	if d >= 24*time.Hour {
-		days := int(d / (24 * time.Hour))
-		return fmt.Sprintf("%dd", days)
+func formatBytes(b int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case b >= gb:
+		return fmt.Sprintf("%.1f GB", float64(b)/float64(gb))
+	case b >= mb:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(mb))
+	case b >= kb:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", b)
 	}
-	if d >= time.Hour {
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	}
-	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
+

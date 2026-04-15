@@ -81,6 +81,18 @@
 - [x] 2026-04-14 lipgloss JoinHorizontal/JoinVerticalを廃止、行ごとに直接出力組み立て
 - [x] 2026-04-14 最終出力をm.height-1行にハードキャップ
 
+## ログストリーム格納サイズ表示
+- [x] 2026-04-15 要件定義書 F2 に格納サイズ表示を追加
+- [x] 2026-04-15 LogStream 構造体に StoredBytes フィールド追加 + テスト
+- [x] 2026-04-15 TUI表示にストリーム格納サイズを追加 + formatBytes ヘルパー + テスト
+
+## 時間範囲フィルタ削除 (F7)
+- [x] 2026-04-15 GetLogEvents/GetMultiStreamLogEventsからstartTime/endTimeパラメータを削除
+- [x] 2026-04-15 TUIからsinceDuration/timeInput/modeTimeInput/tキーバインドを削除
+- [x] 2026-04-15 main.goから--sinceフラグ/parseSinceを削除
+- [x] 2026-04-15 ステータスバーからSince表示を削除
+- [x] 2026-04-15 関連テストの削除・更新
+
 ## ページネーション修正 (F9)
 - [x] 2026-04-14 fetchLogGroups/fetchLogStreamsをPage API対応に変更（NextToken返却）
 - [x] 2026-04-14 カーソル末尾到達時に次ページを非同期追加取得（maybeFetchMore）

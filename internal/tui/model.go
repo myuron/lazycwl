@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/myuron/lazycwl/internal/aws"
@@ -22,7 +21,6 @@ type inputMode int
 const (
 	modeNormal    inputMode = iota
 	modeSearch
-	modeTimeInput
 )
 
 // logGroupsPageMsg is sent when the first page of log groups is fetched.
@@ -75,10 +73,8 @@ type Model struct {
 	logGroups     []aws.LogGroup
 	logStreams    []aws.LogStream
 	selectedGroup string
-	sinceDuration time.Duration
 
 	searchQuery string
-	timeInput   string
 	sortByName  bool
 	selected    map[string]bool // multi-select stream names
 
@@ -95,19 +91,17 @@ type Model struct {
 
 // Options configures the initial state of the TUI model.
 type Options struct {
-	InitialGroup  string
-	SinceDuration time.Duration
+	InitialGroup string
 }
 
 // NewModel creates a new TUI model.
 func NewModel(client *aws.Client) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
-		ctx:           ctx,
-		cancel:        cancel,
-		client:        client,
-		currentView:   viewGroups,
-		sinceDuration: time.Hour,
+		ctx:         ctx,
+		cancel:      cancel,
+		client:      client,
+		currentView: viewGroups,
 	}
 }
 
@@ -115,14 +109,10 @@ func NewModel(client *aws.Client) Model {
 func NewModelWithOptions(client *aws.Client, opts Options) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := Model{
-		ctx:           ctx,
-		cancel:        cancel,
-		client:        client,
-		currentView:   viewGroups,
-		sinceDuration: opts.SinceDuration,
-	}
-	if m.sinceDuration == 0 {
-		m.sinceDuration = time.Hour
+		ctx:         ctx,
+		cancel:      cancel,
+		client:      client,
+		currentView: viewGroups,
 	}
 	if opts.InitialGroup != "" {
 		m.selectedGroup = opts.InitialGroup
@@ -196,8 +186,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.mode {
 		case modeSearch:
 			return m.handleSearchKey(msg)
-		case modeTimeInput:
-			return m.handleTimeInputKey(msg)
 		default:
 			return m.handleKey(msg)
 		}
@@ -250,10 +238,8 @@ func (m Model) fetchMoreStreams() tea.Cmd {
 }
 
 func (m Model) fetchLogEvents(groupName, streamName string) tea.Cmd {
-	since := m.sinceDuration
 	return func() tea.Msg {
-		now := time.Now()
-		events, err := m.client.GetLogEvents(m.ctx, groupName, streamName, now.Add(-since), now)
+		events, err := m.client.GetLogEvents(m.ctx, groupName, streamName)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -262,10 +248,8 @@ func (m Model) fetchLogEvents(groupName, streamName string) tea.Cmd {
 }
 
 func (m Model) fetchMultiLogEvents(groupName string, streamNames []string) tea.Cmd {
-	since := m.sinceDuration
 	return func() tea.Msg {
-		now := time.Now()
-		events, err := m.client.GetMultiStreamLogEvents(m.ctx, groupName, streamNames, now.Add(-since), now)
+		events, err := m.client.GetMultiStreamLogEvents(m.ctx, groupName, streamNames)
 		if err != nil {
 			return errMsg{err}
 		}

@@ -279,13 +279,6 @@ func TestModel_EditorFinished_RestoresView(t *testing.T) {
 	}
 }
 
-func TestModel_DefaultSinceDuration(t *testing.T) {
-	m := NewModel(nil)
-	if m.sinceDuration != time.Hour {
-		t.Errorf("expected default since duration 1h, got %v", m.sinceDuration)
-	}
-}
-
 func TestModel_ViewTwoColumns_GroupsView(t *testing.T) {
 	m := NewModel(nil)
 	m.width = 100
@@ -357,6 +350,44 @@ func TestModel_ViewTwoColumns_StreamsShowLastEvent(t *testing.T) {
 	}
 	if !strings.Contains(view, "2024-03-20 14:05:30") {
 		t.Error("expected Last Event timestamp '2024-03-20 14:05:30' next to stream name")
+	}
+}
+
+func TestModel_ViewTwoColumns_StreamsShowStoredBytes(t *testing.T) {
+	ts := time.Date(2024, 3, 20, 14, 5, 30, 0, time.UTC)
+	m := NewModel(nil)
+	m.width = 120
+	m.height = 24
+	m.currentView = viewStreams
+	m.selectedGroup = "/test/group"
+	m.logStreams = []aws.LogStream{
+		{Name: "my-stream", LastEventTimestamp: ts, StoredBytes: 4096},
+	}
+	m.cursor = 0
+
+	view := m.View()
+	if !strings.Contains(view, "4.0 KB") {
+		t.Errorf("expected stored bytes '4.0 KB' in view, got:\n%s", view)
+	}
+}
+
+func TestFormatBytes(t *testing.T) {
+	tests := []struct {
+		bytes int64
+		want  string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1024, "1.0 KB"},
+		{1536, "1.5 KB"},
+		{1048576, "1.0 MB"},
+		{1073741824, "1.0 GB"},
+	}
+	for _, tt := range tests {
+		got := formatBytes(tt.bytes)
+		if got != tt.want {
+			t.Errorf("formatBytes(%d) = %q, want %q", tt.bytes, got, tt.want)
+		}
 	}
 }
 
@@ -451,72 +482,6 @@ func TestModel_SearchMode_BackspaceDeletesChar(t *testing.T) {
 	m, _ = update(m, tea.KeyMsg{Type: tea.KeyBackspace})
 	if m.searchQuery != "ab" {
 		t.Errorf("expected search query 'ab' after backspace, got %q", m.searchQuery)
-	}
-}
-
-func TestModel_TimeRangeInput(t *testing.T) {
-	m := NewModel(nil)
-
-	// t enters time input mode
-	m, _ = update(m, keyMsg('t'))
-	if m.mode != modeTimeInput {
-		t.Errorf("expected modeTimeInput, got %d", m.mode)
-	}
-
-	// type "30m" then Enter
-	for _, r := range "30m" {
-		m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.sinceDuration != 30*time.Minute {
-		t.Errorf("expected 30m, got %v", m.sinceDuration)
-	}
-	if m.mode != modeNormal {
-		t.Errorf("expected modeNormal after enter, got %d", m.mode)
-	}
-}
-
-func TestModel_TimeRangeInput_Days(t *testing.T) {
-	m := NewModel(nil)
-
-	m, _ = update(m, keyMsg('t'))
-	for _, r := range "7d" {
-		m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.sinceDuration != 7*24*time.Hour {
-		t.Errorf("expected 7d, got %v", m.sinceDuration)
-	}
-}
-
-func TestModel_TimeRangeInput_Hours(t *testing.T) {
-	m := NewModel(nil)
-
-	m, _ = update(m, keyMsg('t'))
-	for _, r := range "2h" {
-		m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter})
-
-	if m.sinceDuration != 2*time.Hour {
-		t.Errorf("expected 2h, got %v", m.sinceDuration)
-	}
-}
-
-func TestModel_TimeRangeInput_Escape(t *testing.T) {
-	m := NewModel(nil)
-	original := m.sinceDuration
-
-	m, _ = update(m, keyMsg('t'))
-	for _, r := range "99d" {
-		m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEscape})
-
-	if m.sinceDuration != original {
-		t.Errorf("expected duration unchanged after escape, got %v", m.sinceDuration)
 	}
 }
 
@@ -682,8 +647,7 @@ func stringPtr(s string) *string { return &s }
 
 func TestNewModelWithOptions_InitialGroup(t *testing.T) {
 	m := NewModelWithOptions(nil, Options{
-		InitialGroup:  "/aws/lambda/func-a",
-		SinceDuration: 2 * time.Hour,
+		InitialGroup: "/aws/lambda/func-a",
 	})
 
 	if m.currentView != viewStreams {
@@ -692,20 +656,10 @@ func TestNewModelWithOptions_InitialGroup(t *testing.T) {
 	if m.selectedGroup != "/aws/lambda/func-a" {
 		t.Errorf("expected selected group /aws/lambda/func-a, got %s", m.selectedGroup)
 	}
-	if m.sinceDuration != 2*time.Hour {
-		t.Errorf("expected since duration 2h, got %v", m.sinceDuration)
-	}
-}
-
-func TestNewModelWithOptions_DefaultSince(t *testing.T) {
-	m := NewModelWithOptions(nil, Options{})
-	if m.sinceDuration != time.Hour {
-		t.Errorf("expected default 1h, got %v", m.sinceDuration)
-	}
 }
 
 func TestNewModelWithOptions_NoGroup(t *testing.T) {
-	m := NewModelWithOptions(nil, Options{SinceDuration: 30 * time.Minute})
+	m := NewModelWithOptions(nil, Options{})
 	if m.currentView != viewGroups {
 		t.Errorf("expected viewGroups when no InitialGroup, got %d", m.currentView)
 	}

@@ -86,10 +86,12 @@ func TestClient_ListLogStreams(t *testing.T) {
 					{
 						LogStreamName:        aws.String("stream-001"),
 						LastEventTimestamp:    aws.Int64(nowMs),
+						StoredBytes:          aws.Int64(4096),
 					},
 					{
 						LogStreamName:        aws.String("stream-002"),
 						LastEventTimestamp:    aws.Int64(nowMs - 60000),
+						StoredBytes:          aws.Int64(8192),
 					},
 				},
 			}, nil
@@ -109,6 +111,12 @@ func TestClient_ListLogStreams(t *testing.T) {
 	if streams[0].Name != "stream-001" {
 		t.Errorf("expected stream name stream-001, got %s", streams[0].Name)
 	}
+	if streams[0].StoredBytes != 4096 {
+		t.Errorf("expected stored bytes 4096, got %d", streams[0].StoredBytes)
+	}
+	if streams[1].StoredBytes != 8192 {
+		t.Errorf("expected stored bytes 8192, got %d", streams[1].StoredBytes)
+	}
 }
 
 func TestClient_GetLogEvents(t *testing.T) {
@@ -119,6 +127,12 @@ func TestClient_GetLogEvents(t *testing.T) {
 			}
 			if aws.ToString(params.LogStreamName) != "stream-001" {
 				t.Errorf("expected log stream stream-001, got %s", aws.ToString(params.LogStreamName))
+			}
+			if params.StartTime != nil {
+				t.Errorf("expected StartTime to be nil, got %d", *params.StartTime)
+			}
+			if params.EndTime != nil {
+				t.Errorf("expected EndTime to be nil, got %d", *params.EndTime)
 			}
 			return &cloudwatchlogs.GetLogEventsOutput{
 				Events: []types.OutputLogEvent{
@@ -136,9 +150,7 @@ func TestClient_GetLogEvents(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	startTime := time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)
-	endTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
-	events, err := client.GetLogEvents(context.Background(), "/aws/lambda/func-a", "stream-001", startTime, endTime)
+	events, err := client.GetLogEvents(context.Background(), "/aws/lambda/func-a", "stream-001")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,9 +205,7 @@ func TestClient_GetLogEvents_Pagination(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	start := time.Unix(0, 0)
-	end := time.Now()
-	events, err := client.GetLogEvents(context.Background(), "group", "stream", start, end)
+	events, err := client.GetLogEvents(context.Background(), "group", "stream")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -229,7 +239,7 @@ func TestClient_GetLogEvents_PaginationStopsOnSameToken(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	events, err := client.GetLogEvents(context.Background(), "group", "stream", time.Unix(0, 0), time.Now())
+	events, err := client.GetLogEvents(context.Background(), "group", "stream")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -265,7 +275,7 @@ func TestClient_GetLogEvents_PaginationStopsOnEmptyPage(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	events, err := client.GetLogEvents(context.Background(), "group", "stream", time.Unix(0, 0), time.Now())
+	events, err := client.GetLogEvents(context.Background(), "group", "stream")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -299,7 +309,7 @@ func TestClient_GetLogEvents_ContextCancellation(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	_, err := client.GetLogEvents(ctx, "group", "stream", time.Unix(0, 0), time.Now())
+	_, err := client.GetLogEvents(ctx, "group", "stream")
 	if err == nil {
 		t.Fatal("expected error on context cancellation")
 	}
@@ -340,9 +350,7 @@ func TestFetchMultiLogEvents_ConcurrencyLimit(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	start := time.Unix(0, 0)
-	end := time.Now()
-	_, err := client.GetMultiStreamLogEvents(ctx, "group", streams, start, end)
+	_, err := client.GetMultiStreamLogEvents(ctx, "group", streams)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

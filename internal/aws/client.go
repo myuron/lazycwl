@@ -33,6 +33,7 @@ type LogGroup struct {
 type LogStream struct {
 	Name               string
 	LastEventTimestamp  time.Time
+	StoredBytes        int64
 }
 
 // LogEvent represents a single log event.
@@ -146,9 +147,14 @@ func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, ne
 		if s.LastEventTimestamp != nil {
 			lastEvent = time.UnixMilli(*s.LastEventTimestamp)
 		}
+		var stored int64
+		if s.StoredBytes != nil {
+			stored = *s.StoredBytes
+		}
 		streams = append(streams, LogStream{
 			Name:              awssdk.ToString(s.LogStreamName),
 			LastEventTimestamp: lastEvent,
+			StoredBytes:       stored,
 		})
 	}
 	return streams, out.NextToken, nil
@@ -169,25 +175,28 @@ func (c *Client) ListLogStreams(ctx context.Context, logGroupName string) ([]Log
 		if s.LastEventTimestamp != nil {
 			lastEvent = time.UnixMilli(*s.LastEventTimestamp)
 		}
+		var stored int64
+		if s.StoredBytes != nil {
+			stored = *s.StoredBytes
+		}
 		streams = append(streams, LogStream{
 			Name:              awssdk.ToString(s.LogStreamName),
 			LastEventTimestamp: lastEvent,
+			StoredBytes:       stored,
 		})
 	}
 	return streams, nil
 }
 
-// GetLogEvents returns all log events for a given log group and stream within
-// the specified time range, handling pagination automatically.
-func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName string, startTime, endTime time.Time) ([]LogEvent, error) {
+// GetLogEvents returns all log events for a given log group and stream,
+// handling pagination automatically.
+func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName string) ([]LogEvent, error) {
 	var allEvents []LogEvent
 	var prevToken string
 
 	input := &cloudwatchlogs.GetLogEventsInput{
 		LogGroupName:  awssdk.String(logGroupName),
 		LogStreamName: awssdk.String(logStreamName),
-		StartTime:     awssdk.Int64(startTime.UnixMilli()),
-		EndTime:       awssdk.Int64(endTime.UnixMilli()),
 		StartFromHead: awssdk.Bool(true),
 	}
 
@@ -224,7 +233,7 @@ func (c *Client) GetLogEvents(ctx context.Context, logGroupName, logStreamName s
 
 // GetMultiStreamLogEvents fetches log events from multiple streams concurrently,
 // limiting parallelism to maxConcurrentStreams.
-func (c *Client) GetMultiStreamLogEvents(ctx context.Context, logGroupName string, streamNames []string, startTime, endTime time.Time) ([]LogEvent, error) {
+func (c *Client) GetMultiStreamLogEvents(ctx context.Context, logGroupName string, streamNames []string) ([]LogEvent, error) {
 	results := make([][]LogEvent, len(streamNames))
 	var mu sync.Mutex
 	var firstErr error
@@ -239,7 +248,7 @@ func (c *Client) GetMultiStreamLogEvents(ctx context.Context, logGroupName strin
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			events, err := c.GetLogEvents(ctx, logGroupName, streamName, startTime, endTime)
+			events, err := c.GetLogEvents(ctx, logGroupName, streamName)
 			if err != nil {
 				mu.Lock()
 				if firstErr == nil {

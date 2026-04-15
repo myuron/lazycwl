@@ -1,83 +1,118 @@
 # lazycwl
 
-AWS CloudWatch Logsをターミナルで素早く閲覧・調査するためのTUIツール。yazi風の階層ナビゲーションでロググループ/ストリームをブラウズし、選択したログを`$EDITOR`で開いてVimベースの障害調査を行う。
+A TUI tool for quickly browsing and investigating AWS CloudWatch Logs from the terminal. Browse log groups and streams with yazi-style hierarchical navigation, then open selected logs in `$EDITOR` for Vim-based incident investigation.
 
-## インストール
+## Installation
 
 ```bash
 go install github.com/myuron/lazycwl@latest
 ```
 
-または Nix Flake 経由:
+Or run directly via Nix Flake:
 
 ```bash
-nix develop  # 開発環境
-go build -o lazycwl .
+nix run github:myuron/lazycwl
 ```
 
-## 使い方
+To add to your own flake:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    lazycwl.url = "github:myuron/lazycwl";
+  };
+
+  outputs = { nixpkgs, lazycwl, ... }:
+    let
+      system = "x86_64-linux"; # or "aarch64-linux", "x86_64-darwin", "aarch64-darwin"
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ lazycwl.overlays.default ];
+      };
+    in {
+      # Use pkgs.lazycwl in your packages, devShells, etc.
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [ pkgs.lazycwl ];
+      };
+    };
+}
+```
+
+## Usage
 
 ```bash
-# デフォルト（環境変数やAWSプロファイルの認証情報を使用）
+# Default (uses environment variables or AWS profile credentials)
 lazycwl
 
-# プロファイル・リージョン指定
+# Specify profile and region
 lazycwl --profile my-profile --region ap-northeast-1
+
+# Jump directly to a log group's streams
+lazycwl --group /aws/lambda/my-function
+
+# Open a specific stream directly in $EDITOR (skips TUI)
+lazycwl --group /aws/lambda/my-function --stream 'stream-name'
 ```
 
-### キーバインド
+## Key Bindings
 
-#### ノーマルモード
+### Normal Mode
 
-| キー | 動作 |
-|------|------|
-| `j` / `↓` | カーソルを下に移動 |
-| `k` / `↑` | カーソルを上に移動 |
-| `g` | リスト先頭に移動 |
-| `G` | リスト末尾に移動 |
-| `l` / `Enter` / `→` | 階層を深く進む / ログをエディタで開く |
-| `h` / `Backspace` / `←` | 階層を戻る |
-| `/` | インクリメンタル検索モードに入る |
-| `t` | 時間範囲入力モードに入る |
-| `Space` | ストリームの複数選択トグル（ストリーム一覧画面のみ） |
-| `s` | ソート切り替え: 最終イベント時刻順 ↔ ストリーム名順（ストリーム一覧画面のみ） |
-| `q` | アプリケーション終了 |
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move cursor down |
+| `k` / `↑` | Move cursor up |
+| `g` | Jump to top of list |
+| `G` | Jump to bottom of list |
+| `l` / `Enter` / `→` | Go deeper / open logs in editor |
+| `h` / `Backspace` / `←` | Go back |
+| `/` | Enter incremental search mode |
+| `Space` | Toggle multiple stream selection (stream list only) |
+| `s` | Toggle sort: last event time ↔ stream name (stream list only) |
+| `q` | Quit |
 
-#### 検索モード（`/` で入る）
+### Search Mode (enter with `/`)
 
-| キー | 動作 |
-|------|------|
-| 文字入力 | インクリメンタルにリストを絞り込み |
-| `Enter` | 検索を確定してノーマルモードに戻る |
-| `Escape` | 検索をクリアしてノーマルモードに戻る |
-| `Backspace` | 検索文字列を1文字削除 |
+| Key | Action |
+|-----|--------|
+| Text input | Incrementally filter the list |
+| `Enter` | Confirm search and return to normal mode |
+| `Escape` | Clear search and return to normal mode |
+| `Backspace` | Delete one character from search string |
 
-#### 時間範囲入力モード（`t` で入る）
+## Layout
 
-| キー | 動作 |
-|------|------|
-| 文字入力 | 時間範囲を入力（例: `30m`, `2h`, `7d`） |
-| `Enter` | 時間範囲を確定してノーマルモードに戻る |
-| `Escape` | 入力をキャンセルしてノーマルモードに戻る |
-| `Backspace` | 入力文字列を1文字削除 |
+```
+┌──────────────────┬────────────────────────────────────┐
+│ Log Groups       │ Log Streams                        │
+│                  │                                    │
+│ /aws/lambda   ←  │ > stream-001  ←                    │
+│ /aws/ecs         │   stream-002                       │
+│ /app/api         │   stream-003                       │
+│                  │                                    │
+├──────────────────┴────────────────────────────────────┤
+│ Sort: time ↓ | q: quit | /: search | s: sort         │
+└───────────────────────────────────────────────────────┘
+```
 
-## ローカル開発（floci）
+## Local Development (floci)
 
-[floci](https://github.com/floci-io/floci)を使ってAWS環境なしで動作確認できる。
+You can test without an AWS environment using [floci](https://github.com/floci-io/floci).
 
-### セットアップ
+### Setup
 
 ```bash
-# 1. 開発環境に入る
+# 1. Enter the dev environment
 nix develop
 
-# 2. flociを起動
+# 2. Start floci
 docker compose up -d
 
-# 3. テストデータを投入
+# 3. Seed test data
 ./scripts/seed-testdata.sh
 
-# 4. lazycwlをfloci向けに起動
+# 4. Run lazycwl against floci
 AWS_ENDPOINT_URL=http://localhost:4566 \
 AWS_ACCESS_KEY_ID=test \
 AWS_SECRET_ACCESS_KEY=test \
@@ -85,40 +120,49 @@ AWS_DEFAULT_REGION=ap-northeast-1 \
 go run .
 ```
 
-### テストデータの内容
+### Test Data
 
-seedスクリプトは以下のロググループとストリームを作成する:
+The seed script creates the following log groups and streams:
 
-| ロググループ | ストリーム | 内容 |
-|---|---|---|
-| `/aws/lambda/api-handler` | `[$LATEST]abc123` | 正常なAPIリクエスト処理 |
-| `/aws/lambda/api-handler` | `[$LATEST]def456` | DB接続タイムアウトエラー |
-| `/aws/lambda/batch-processor` | `[$LATEST]ghi789` | バッチ処理（スロークエリ警告あり） |
-| `/aws/ecs/web-service` | `web-service/web/task-001` | Webサーバー起動、500エラー含む |
-| `/app/api/backend` | `i-0abc123def456` | サーキットブレーカー動作 |
-| `/app/worker/queue-consumer` | `worker-1` | キュー処理、決済エラー含む |
+| Log Group | Stream | Content |
+|-----------|--------|---------|
+| `/aws/lambda/api-handler` | `[$LATEST]abc123` | Normal API request processing |
+| `/aws/lambda/api-handler` | `[$LATEST]def456` | DB connection timeout error |
+| `/aws/lambda/batch-processor` | `[$LATEST]ghi789` | Batch processing (with slow query warnings) |
+| `/aws/ecs/web-service` | `web-service/web/task-001` | Web server startup, includes 500 errors |
+| `/app/api/backend` | `i-0abc123def456` | Circuit breaker activation |
+| `/app/worker/queue-consumer` | `worker-1` | Queue processing, includes payment errors |
 
-### 大量テストデータの投入
+### Large Test Data
 
-ページネーションやスクロール性能のテスト用に、大量データを生成するスクリプトも用意されている。
+For testing pagination and scroll performance, a script for generating large datasets is also available.
 
 ```bash
-# デフォルト: 50グループ × 20ストリーム × 100イベント = 100,000イベント
+# Default: 50 groups x 20 streams x 100 events = 100,000 events
 ./scripts/seed-large-testdata.sh
 
-# オプションでカスタマイズ可能
+# Customizable with options
 ./scripts/seed-large-testdata.sh --groups 10 --streams 5 --events 50
 ./scripts/seed-large-testdata.sh --groups 100 --streams 50 --events 500
 ```
 
-| オプション | デフォルト | 説明 |
-|---|---|---|
-| `--groups` | 50 | 作成するロググループ数 |
-| `--streams` | 20 | グループあたりのストリーム数 |
-| `--events` | 100 | ストリームあたりのイベント数 |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--groups` | 50 | Number of log groups to create |
+| `--streams` | 20 | Number of streams per group |
+| `--events` | 100 | Number of events per stream |
 
-### flociの停止
+### Stopping floci
 
 ```bash
 docker compose down
 ```
+
+## Tech Stack
+
+- [Go](https://go.dev/)
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework
+- [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
+- [Lip Gloss](https://github.com/charmbracelet/lipgloss) — Styling
+- [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2) — CloudWatch Logs API
+- [Nix Flake](https://nixos.wiki/wiki/Flakes) — Build management

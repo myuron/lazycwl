@@ -17,11 +17,25 @@
     };
   };
 
-  outputs = { nixpkgs, flake-utils, agent-skills, anthropic-skills, ... }:
+  outputs = { self, nixpkgs, flake-utils, agent-skills, anthropic-skills, ... }:
+  {
+    overlays.default = final: prev: {
+      lazycwl = final.buildGoModule {
+        pname = "lazycwl";
+        version = "0.1.0";
+        src = self;
+        vendorHash = "sha256-71IHdtlB5cjOiYrrr5SJ8d/61ZSuWXGvtra3q1ULFCE=";
+      };
+    };
+  }
+  //
   flake-utils.lib.eachDefaultSystem (
     system:
     let
-      pkgs = nixpkgs.legacyPackages.${system};
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ self.overlays.default ];
+      };
       agentLib = agent-skills.lib.agent-skills;
       sources = {
         anthropic = {
@@ -48,7 +62,13 @@
       };
     in
     {
+      packages.default = pkgs.lazycwl;
+
       apps = {
+        default = {
+          type = "app";
+          program = "${pkgs.lazycwl}/bin/lazycwl";
+        };
         skills-install-local = {
           type = "app";
           program = "${agentLib.mkLocalInstallScript {inherit pkgs bundle; targets = localTargets; }}/bin/skills-install-local";

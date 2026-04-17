@@ -10,10 +10,14 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
 // maxConcurrentStreams limits the number of concurrent GetLogEvents API calls.
 const maxConcurrentStreams = 5
+
+// defaultPageSize is the default number of items to fetch per API page.
+const defaultPageSize = 50
 
 // LogsClient is the interface for CloudWatch Logs API operations.
 type LogsClient interface {
@@ -136,6 +140,9 @@ func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, ne
 	out, err := c.api.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
 		LogGroupName: awssdk.String(logGroupName),
 		NextToken:    nextToken,
+		OrderBy:      types.OrderByLastEventTime,
+		Descending:   awssdk.Bool(true),
+		Limit:        awssdk.Int32(defaultPageSize),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("describing log streams: %w", err)
@@ -160,32 +167,10 @@ func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, ne
 	return streams, out.NextToken, nil
 }
 
-// ListLogStreams returns all log streams for a given log group (first page).
+// ListLogStreams returns log streams for a given log group (first page).
 func (c *Client) ListLogStreams(ctx context.Context, logGroupName string) ([]LogStream, error) {
-	out, err := c.api.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
-		LogGroupName: awssdk.String(logGroupName),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("describing log streams: %w", err)
-	}
-
-	streams := make([]LogStream, 0, len(out.LogStreams))
-	for _, s := range out.LogStreams {
-		var lastEvent time.Time
-		if s.LastEventTimestamp != nil {
-			lastEvent = time.UnixMilli(*s.LastEventTimestamp)
-		}
-		var stored int64
-		if s.StoredBytes != nil {
-			stored = *s.StoredBytes
-		}
-		streams = append(streams, LogStream{
-			Name:              awssdk.ToString(s.LogStreamName),
-			LastEventTimestamp: lastEvent,
-			StoredBytes:       stored,
-		})
-	}
-	return streams, nil
+	streams, _, err := c.ListLogStreamsPage(ctx, logGroupName, nil)
+	return streams, err
 }
 
 // GetLogEvents returns all log events for a given log group and stream,

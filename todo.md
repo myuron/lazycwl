@@ -97,3 +97,8 @@
 - [x] 2026-04-14 fetchLogGroups/fetchLogStreamsをPage API対応に変更（NextToken返却）
 - [x] 2026-04-14 カーソル末尾到達時に次ページを非同期追加取得（maybeFetchMore）
 - [x] 2026-04-14 追加ページはリストにappend（既存データを保持）
+
+## DescribeLogStreams パラメータ修正 (F2)
+- [x] 2026-04-18 テスト追加: OrderBy/Descending/Limit パラメータの検証
+- [x] 2026-04-18 実装修正: ListLogStreamsPage に OrderBy=LastEventTime, Descending=true, Limit=50 を追加
+- [x] 2026-04-18 リファクタ: ListLogStreams を ListLogStreamsPage のラッパーに簡略化

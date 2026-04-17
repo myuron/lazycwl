@@ -75,11 +75,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.offset = 0
 			return m, nil
 		case "s":
-			if m.currentView == viewStreams {
-				m.sortByName = !m.sortByName
-				m.cursor = 0
-				m.offset = 0
-			}
 			return m, nil
 		case "q":
 			if m.cancel != nil {

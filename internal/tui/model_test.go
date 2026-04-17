@@ -485,33 +485,6 @@ func TestModel_SearchMode_BackspaceDeletesChar(t *testing.T) {
 	}
 }
 
-func TestModel_SortToggle(t *testing.T) {
-	now := time.Now()
-	m := NewModel(nil)
-	m.currentView = viewStreams
-	m.logStreams = []aws.LogStream{
-		{Name: "b-stream", LastEventTimestamp: now.Add(-time.Hour)},
-		{Name: "a-stream", LastEventTimestamp: now},
-	}
-
-	// Default sort is by time (descending)
-	if m.sortByName {
-		t.Error("expected default sort by time")
-	}
-
-	// s toggles to name sort
-	m, _ = update(m, keyMsg('s'))
-	if !m.sortByName {
-		t.Error("expected sort by name after pressing s")
-	}
-
-	// s toggles back to time sort
-	m, _ = update(m, keyMsg('s'))
-	if m.sortByName {
-		t.Error("expected sort by time after pressing s again")
-	}
-}
-
 func TestModel_SortedStreams_ByTime(t *testing.T) {
 	now := time.Now()
 	m := NewModel(nil)
@@ -524,22 +497,6 @@ func TestModel_SortedStreams_ByTime(t *testing.T) {
 	sorted := m.sortedStreams(m.logStreams)
 	if sorted[0].Name != "new-stream" {
 		t.Errorf("expected new-stream first (time desc), got %s", sorted[0].Name)
-	}
-}
-
-func TestModel_SortedStreams_ByName(t *testing.T) {
-	now := time.Now()
-	m := NewModel(nil)
-	m.currentView = viewStreams
-	m.sortByName = true
-	m.logStreams = []aws.LogStream{
-		{Name: "b-stream", LastEventTimestamp: now},
-		{Name: "a-stream", LastEventTimestamp: now},
-	}
-
-	sorted := m.sortedStreams(m.logStreams)
-	if sorted[0].Name != "a-stream" {
-		t.Errorf("expected a-stream first (name asc), got %s", sorted[0].Name)
 	}
 }
 

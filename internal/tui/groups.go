@@ -35,15 +35,9 @@ func (m Model) filteredGroups() []aws.LogGroup {
 func (m Model) sortedStreams(streams []aws.LogStream) []aws.LogStream {
 	sorted := make([]aws.LogStream, len(streams))
 	copy(sorted, streams)
-	if m.sortByName {
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].Name < sorted[j].Name
-		})
-	} else {
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].LastEventTimestamp.After(sorted[j].LastEventTimestamp)
-		})
-	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].LastEventTimestamp.After(sorted[j].LastEventTimestamp)
+	})
 	return sorted
 }
 
@@ -99,7 +93,6 @@ func (m Model) navigateBack() (tea.Model, tea.Cmd) {
 		m.adjustOffset()
 		m.logStreams = nil
 		m.searchQuery = ""
-		m.sortByName = false
 		m.selected = nil
 		return m, nil
 	}

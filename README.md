@@ -55,6 +55,10 @@ lazycwl --group /aws/lambda/my-function
 lazycwl --group /aws/lambda/my-function --stream 'stream-name'
 ```
 
+## Notes
+
+- Log streams are sorted by last event time (descending) by default. Streams that have never received any log events are **not shown** in this mode because the AWS API excludes them when `OrderBy=LastEventTime` is specified. To see all streams including empty ones, switch to name-based sorting with `s`.
+
 ## Key Bindings
 
 ### Normal Mode

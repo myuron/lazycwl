@@ -81,6 +81,15 @@ func TestClient_ListLogStreams(t *testing.T) {
 			if aws.ToString(params.LogGroupName) != "/aws/lambda/func-a" {
 				t.Errorf("expected log group /aws/lambda/func-a, got %s", aws.ToString(params.LogGroupName))
 			}
+			if params.OrderBy != types.OrderByLastEventTime {
+				t.Errorf("expected OrderBy=LastEventTime, got %v", params.OrderBy)
+			}
+			if !aws.ToBool(params.Descending) {
+				t.Error("expected Descending=true")
+			}
+			if aws.ToInt32(params.Limit) != 50 {
+				t.Errorf("expected Limit=50, got %d", aws.ToInt32(params.Limit))
+			}
 			return &cloudwatchlogs.DescribeLogStreamsOutput{
 				LogStreams: []types.LogStream{
 					{
@@ -116,6 +125,54 @@ func TestClient_ListLogStreams(t *testing.T) {
 	}
 	if streams[1].StoredBytes != 8192 {
 		t.Errorf("expected stored bytes 8192, got %d", streams[1].StoredBytes)
+	}
+}
+
+func TestClient_ListLogStreamsPage(t *testing.T) {
+	now := time.Now()
+	nowMs := now.UnixMilli()
+
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			if aws.ToString(params.LogGroupName) != "/aws/lambda/func-a" {
+				t.Errorf("expected log group /aws/lambda/func-a, got %s", aws.ToString(params.LogGroupName))
+			}
+			if params.OrderBy != types.OrderByLastEventTime {
+				t.Errorf("expected OrderBy=LastEventTime, got %v", params.OrderBy)
+			}
+			if !aws.ToBool(params.Descending) {
+				t.Error("expected Descending=true")
+			}
+			if aws.ToInt32(params.Limit) != 50 {
+				t.Errorf("expected Limit=50, got %d", aws.ToInt32(params.Limit))
+			}
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{
+						LogStreamName:     aws.String("stream-001"),
+						LastEventTimestamp: aws.Int64(nowMs),
+						StoredBytes:       aws.Int64(4096),
+					},
+				},
+				NextToken: aws.String("next-page"),
+			}, nil
+		},
+	}
+
+	client := &Client{api: mock}
+	streams, nextToken, err := client.ListLogStreamsPage(context.Background(), "/aws/lambda/func-a", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(streams) != 1 {
+		t.Fatalf("expected 1 stream, got %d", len(streams))
+	}
+	if streams[0].Name != "stream-001" {
+		t.Errorf("expected stream name stream-001, got %s", streams[0].Name)
+	}
+	if nextToken == nil || *nextToken != "next-page" {
+		t.Errorf("expected nextToken=next-page, got %v", nextToken)
 	}
 }
 

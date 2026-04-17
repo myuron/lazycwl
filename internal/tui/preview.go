@@ -253,11 +253,7 @@ func (m Model) renderInputLine() string {
 }
 
 func (m Model) renderStatusBar() string {
-	sortStr := "time ↓"
-	if m.sortByName {
-		sortStr = "name ↑"
-	}
-	return fmt.Sprintf(" Sort: %s | q: quit | /: search | s: sort", sortStr)
+	return " Sort: time ↓ | q: quit | /: search"
 }
 
 func formatBytes(b int64) string {

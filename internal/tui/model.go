@@ -75,7 +75,6 @@ type Model struct {
 	selectedGroup string
 
 	searchQuery string
-	sortByName  bool
 	selected    map[string]bool // multi-select stream names
 
 	groupsNextToken  *string

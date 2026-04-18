@@ -104,8 +104,11 @@ func (m Model) viewTwoColumn() string {
 
 	// Build output line-by-line to avoid lipgloss JoinHorizontal/JoinVertical
 	// adding unexpected padding that can cause overflow on some terminals.
-	leftLines := strings.Split(left, "\n")
-	rightLines := strings.Split(right, "\n")
+	// Cap each pane to a fixed height (top border + contentHeight + bottom
+	// border) because lipgloss.Height does not truncate wrapped content.
+	expectedPaneLines := contentHeight + 2
+	leftLines := capPaneLines(strings.Split(left, "\n"), expectedPaneLines)
+	rightLines := capPaneLines(strings.Split(right, "\n"), expectedPaneLines)
 
 	maxPaneLines := len(leftLines)
 	if len(rightLines) > maxPaneLines {
@@ -258,5 +261,21 @@ func (m Model) renderStatusBar() string {
 		sortStr = "time ↑"
 	}
 	return fmt.Sprintf(" Sort: %s | q: quit | /: search | s: sort", sortStr)
+}
+
+// capPaneLines ensures a bordered pane has exactly n lines by keeping the
+// first line (top border), the middle content lines up to the limit, and the
+// last line (bottom border). This prevents lipgloss text wrapping from
+// expanding the pane beyond the expected height.
+func capPaneLines(lines []string, n int) []string {
+	if len(lines) <= n {
+		return lines
+	}
+	// top border + (n-2) content lines + bottom border
+	capped := make([]string, 0, n)
+	capped = append(capped, lines[0])
+	capped = append(capped, lines[1:n-1]...)
+	capped = append(capped, lines[len(lines)-1])
+	return capped
 }
 

@@ -1195,3 +1195,46 @@ func TestModel_PaneHeight_FewItemsBothSides(t *testing.T) {
 		t.Errorf("expected 1 bottom border line, got %d (panes have different heights)", bottomBorderCount)
 	}
 }
+
+func TestModel_PaneHeight_LongGroupNamesWrap(t *testing.T) {
+	// When log group names exceed pane width, lipgloss wraps them into extra
+	// lines.  The pane must still be capped to the expected height so the
+	// bottom border is not pushed off-screen.
+	m := NewModel(nil)
+	m.width = 60 // narrow — left pane is 20 chars
+	m.height = 14
+	m.logGroups = []aws.LogGroup{
+		{Name: "/aws/lambda/very-long-function-name-that-exceeds-pane-width-0"},
+		{Name: "/aws/lambda/very-long-function-name-that-exceeds-pane-width-1"},
+		{Name: "/aws/lambda/very-long-function-name-that-exceeds-pane-width-2"},
+		{Name: "/aws/lambda/very-long-function-name-that-exceeds-pane-width-3"},
+		{Name: "/aws/lambda/very-long-function-name-that-exceeds-pane-width-4"},
+	}
+	m.cursor = 0
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	// Both pane bottom borders must appear on the same line (exactly 1 line
+	// containing ╰), proving the left pane didn't overflow due to wrapping.
+	bottomBorderCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "╰") {
+			bottomBorderCount++
+		}
+	}
+	if bottomBorderCount != 1 {
+		t.Errorf("expected 1 bottom border line, got %d (left pane overflowed due to text wrapping)", bottomBorderCount)
+	}
+
+	// The bottom border line must contain both left and right pane corners
+	for _, line := range lines {
+		if strings.Contains(line, "╰") {
+			count := strings.Count(line, "╰")
+			if count != 2 {
+				t.Errorf("expected 2 ╰ on bottom border line (left+right pane), got %d", count)
+			}
+			break
+		}
+	}
+}

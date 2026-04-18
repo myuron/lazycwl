@@ -585,7 +585,7 @@ func TestModel_SpaceOnlyWorksInStreamsView(t *testing.T) {
 	m.cursor = 0
 
 	m, _ = update(m, tea.KeyMsg{Type: tea.KeySpace})
-	if m.selected != nil && len(m.selected) > 0 {
+	if len(m.selected) > 0 {
 		t.Error("space should not select in groups view")
 	}
 }
@@ -857,11 +857,6 @@ func TestModel_ScrollOffset_InactiveGroupListScrolls(t *testing.T) {
 }
 
 // --- Pane height consistency (#3) ---
-
-// countRenderedLines returns the number of lines in a rendered View output.
-func countRenderedLines(view string) int {
-	return len(strings.Split(view, "\n"))
-}
 
 func TestModel_PaneHeight_BothPanesSameHeight(t *testing.T) {
 	m := NewModel(nil)

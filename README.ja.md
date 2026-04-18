@@ -1,5 +1,10 @@
 # lazycwl
 
+[![CI](https://github.com/myuron/lazycwl/actions/workflows/ci.yml/badge.svg)](https://github.com/myuron/lazycwl/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/myuron/lazycwl)](https://goreportcard.com/report/github.com/myuron/lazycwl)
+[![Go Reference](https://pkg.go.dev/badge/github.com/myuron/lazycwl.svg)](https://pkg.go.dev/github.com/myuron/lazycwl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 AWS CloudWatch Logsをターミナルで素早く閲覧・調査するためのTUIツール。yazi風の階層ナビゲーションでロググループ/ストリームをブラウズし、選択したログを`$EDITOR`で開いてVimベースの障害調査を行う。
 
 ## インストール

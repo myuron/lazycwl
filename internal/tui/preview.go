@@ -164,7 +164,7 @@ func (m Model) renderGroupList(maxHeight int) string {
 		if i == m.cursor {
 			cursor = ">"
 		}
-		b.WriteString(fmt.Sprintf("%s %s\n", cursor, groups[i].Name))
+		fmt.Fprintf(&b, "%s %s\n", cursor, groups[i].Name)
 		lines++
 	}
 	for lines < maxHeight {
@@ -197,7 +197,7 @@ func (m Model) renderGroupListInactive(maxHeight int) string {
 		if i == m.groupCursor {
 			cursor = ">"
 		}
-		b.WriteString(fmt.Sprintf("%s %s\n", cursor, m.logGroups[i].Name))
+		fmt.Fprintf(&b, "%s %s\n", cursor, m.logGroups[i].Name)
 		lines++
 	}
 	for lines < maxHeight {
@@ -210,7 +210,7 @@ func (m Model) renderGroupListInactive(maxHeight int) string {
 func (m Model) renderStreamList(maxHeight int) string {
 	var b strings.Builder
 	if m.selectedGroup != "" {
-		b.WriteString(fmt.Sprintf("Streams — %s\n", m.selectedGroup))
+		fmt.Fprintf(&b, "Streams — %s\n", m.selectedGroup)
 	} else {
 		b.WriteString("Streams\n")
 	}
@@ -236,7 +236,7 @@ func (m Model) renderStreamList(maxHeight int) string {
 			mark = "*"
 		}
 		lastEvent := s.LastEventTimestamp.Format("2006-01-02 15:04:05")
-		b.WriteString(fmt.Sprintf("%s%s %s  %s\n", cursor, mark, s.Name, lastEvent))
+		fmt.Fprintf(&b, "%s%s %s  %s\n", cursor, mark, s.Name, lastEvent)
 		lines++
 	}
 	for lines < maxHeight {

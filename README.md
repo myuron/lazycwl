@@ -162,6 +162,18 @@ For testing pagination and scroll performance, a script for generating large dat
 docker compose down
 ```
 
+## Tips
+
+### Saving logs from Vim
+
+When you open logs in `$EDITOR`, they are written to a temporary file that is automatically deleted when the editor exits. To save logs permanently, use Vim's `:w` command to write to a separate file before quitting:
+
+```vim
+:w ~/logs/incident-2024-01-15.log
+```
+
+You can also filter and extract specific lines before saving — this is the intended workflow for incident investigation.
+
 ## Tech Stack
 
 - [Go](https://go.dev/)

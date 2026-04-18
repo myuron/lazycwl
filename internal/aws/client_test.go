@@ -160,7 +160,7 @@ func TestClient_ListLogStreamsPage(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	streams, nextToken, err := client.ListLogStreamsPage(context.Background(), "/aws/lambda/func-a", nil)
+	streams, nextToken, err := client.ListLogStreamsPage(context.Background(), "/aws/lambda/func-a", nil, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,6 +173,49 @@ func TestClient_ListLogStreamsPage(t *testing.T) {
 	}
 	if nextToken == nil || *nextToken != "next-page" {
 		t.Errorf("expected nextToken=next-page, got %v", nextToken)
+	}
+}
+
+func TestClient_ListLogStreamsPage_Ascending(t *testing.T) {
+	now := time.Now()
+	nowMs := now.UnixMilli()
+
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			if params.OrderBy != types.OrderByLastEventTime {
+				t.Errorf("expected OrderBy=LastEventTime, got %v", params.OrderBy)
+			}
+			if aws.ToBool(params.Descending) {
+				t.Error("expected Descending=false for ascending order")
+			}
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{
+						LogStreamName:     aws.String("stream-old"),
+						LastEventTimestamp: aws.Int64(nowMs - 60000),
+						StoredBytes:       aws.Int64(1024),
+					},
+					{
+						LogStreamName:     aws.String("stream-new"),
+						LastEventTimestamp: aws.Int64(nowMs),
+						StoredBytes:       aws.Int64(2048),
+					},
+				},
+			}, nil
+		},
+	}
+
+	client := &Client{api: mock}
+	streams, _, err := client.ListLogStreamsPage(context.Background(), "/aws/lambda/func-a", nil, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(streams) != 2 {
+		t.Fatalf("expected 2 streams, got %d", len(streams))
+	}
+	if streams[0].Name != "stream-old" {
+		t.Errorf("expected stream-old first (ascending), got %s", streams[0].Name)
 	}
 }
 

@@ -485,7 +485,7 @@ func TestModel_SearchMode_BackspaceDeletesChar(t *testing.T) {
 	}
 }
 
-func TestModel_SortedStreams_ByTime(t *testing.T) {
+func TestModel_SortedStreams_ByTimeDesc(t *testing.T) {
 	now := time.Now()
 	m := NewModel(nil)
 	m.currentView = viewStreams
@@ -497,6 +497,52 @@ func TestModel_SortedStreams_ByTime(t *testing.T) {
 	sorted := m.sortedStreams(m.logStreams)
 	if sorted[0].Name != "new-stream" {
 		t.Errorf("expected new-stream first (time desc), got %s", sorted[0].Name)
+	}
+}
+
+func TestModel_SortedStreams_ByTimeAsc(t *testing.T) {
+	now := time.Now()
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.sortDescending = false
+	m.logStreams = []aws.LogStream{
+		{Name: "new-stream", LastEventTimestamp: now},
+		{Name: "old-stream", LastEventTimestamp: now.Add(-time.Hour)},
+	}
+
+	sorted := m.sortedStreams(m.logStreams)
+	if sorted[0].Name != "old-stream" {
+		t.Errorf("expected old-stream first (time asc), got %s", sorted[0].Name)
+	}
+}
+
+func TestModel_SortToggle(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.selectedGroup = "test-group"
+	m.logStreams = []aws.LogStream{{Name: "stream-1"}}
+
+	// Default is descending
+	if !m.sortDescending {
+		t.Error("expected default sortDescending=true")
+	}
+
+	// s toggles to ascending
+	m, cmd := update(m, keyMsg('s'))
+	if m.sortDescending {
+		t.Error("expected sortDescending=false after pressing s")
+	}
+	if cmd == nil {
+		t.Error("expected cmd to re-fetch streams after sort toggle")
+	}
+
+	// s toggles back to descending
+	m, cmd = update(m, keyMsg('s'))
+	if !m.sortDescending {
+		t.Error("expected sortDescending=true after pressing s again")
+	}
+	if cmd == nil {
+		t.Error("expected cmd to re-fetch streams after sort toggle")
 	}
 }
 

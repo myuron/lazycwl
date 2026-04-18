@@ -353,43 +353,6 @@ func TestModel_ViewTwoColumns_StreamsShowLastEvent(t *testing.T) {
 	}
 }
 
-func TestModel_ViewTwoColumns_StreamsShowStoredBytes(t *testing.T) {
-	ts := time.Date(2024, 3, 20, 14, 5, 30, 0, time.UTC)
-	m := NewModel(nil)
-	m.width = 120
-	m.height = 24
-	m.currentView = viewStreams
-	m.selectedGroup = "/test/group"
-	m.logStreams = []aws.LogStream{
-		{Name: "my-stream", LastEventTimestamp: ts, StoredBytes: 4096},
-	}
-	m.cursor = 0
-
-	view := m.View()
-	if !strings.Contains(view, "4.0 KB") {
-		t.Errorf("expected stored bytes '4.0 KB' in view, got:\n%s", view)
-	}
-}
-
-func TestFormatBytes(t *testing.T) {
-	tests := []struct {
-		bytes int64
-		want  string
-	}{
-		{0, "0 B"},
-		{512, "512 B"},
-		{1024, "1.0 KB"},
-		{1536, "1.5 KB"},
-		{1048576, "1.0 MB"},
-		{1073741824, "1.0 GB"},
-	}
-	for _, tt := range tests {
-		got := formatBytes(tt.bytes)
-		if got != tt.want {
-			t.Errorf("formatBytes(%d) = %q, want %q", tt.bytes, got, tt.want)
-		}
-	}
-}
 
 // --- Phase 5: Search / Filter / Sort / Time range ---
 

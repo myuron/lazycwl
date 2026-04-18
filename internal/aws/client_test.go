@@ -95,12 +95,10 @@ func TestClient_ListLogStreams(t *testing.T) {
 					{
 						LogStreamName:        aws.String("stream-001"),
 						LastEventTimestamp:    aws.Int64(nowMs),
-						StoredBytes:          aws.Int64(4096),
 					},
 					{
 						LogStreamName:        aws.String("stream-002"),
 						LastEventTimestamp:    aws.Int64(nowMs - 60000),
-						StoredBytes:          aws.Int64(8192),
 					},
 				},
 			}, nil
@@ -119,12 +117,6 @@ func TestClient_ListLogStreams(t *testing.T) {
 
 	if streams[0].Name != "stream-001" {
 		t.Errorf("expected stream name stream-001, got %s", streams[0].Name)
-	}
-	if streams[0].StoredBytes != 4096 {
-		t.Errorf("expected stored bytes 4096, got %d", streams[0].StoredBytes)
-	}
-	if streams[1].StoredBytes != 8192 {
-		t.Errorf("expected stored bytes 8192, got %d", streams[1].StoredBytes)
 	}
 }
 
@@ -151,7 +143,6 @@ func TestClient_ListLogStreamsPage(t *testing.T) {
 					{
 						LogStreamName:     aws.String("stream-001"),
 						LastEventTimestamp: aws.Int64(nowMs),
-						StoredBytes:       aws.Int64(4096),
 					},
 				},
 				NextToken: aws.String("next-page"),
@@ -193,12 +184,10 @@ func TestClient_ListLogStreamsPage_Ascending(t *testing.T) {
 					{
 						LogStreamName:     aws.String("stream-old"),
 						LastEventTimestamp: aws.Int64(nowMs - 60000),
-						StoredBytes:       aws.Int64(1024),
 					},
 					{
 						LogStreamName:     aws.String("stream-new"),
 						LastEventTimestamp: aws.Int64(nowMs),
-						StoredBytes:       aws.Int64(2048),
 					},
 				},
 			}, nil

@@ -37,7 +37,6 @@ type LogGroup struct {
 type LogStream struct {
 	Name               string
 	LastEventTimestamp  time.Time
-	StoredBytes        int64
 }
 
 // LogEvent represents a single log event.
@@ -155,14 +154,9 @@ func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, ne
 		if s.LastEventTimestamp != nil {
 			lastEvent = time.UnixMilli(*s.LastEventTimestamp)
 		}
-		var stored int64
-		if s.StoredBytes != nil {
-			stored = *s.StoredBytes
-		}
 		streams = append(streams, LogStream{
 			Name:              awssdk.ToString(s.LogStreamName),
 			LastEventTimestamp: lastEvent,
-			StoredBytes:       stored,
 		})
 	}
 	return streams, out.NextToken, nil

@@ -1,79 +1,79 @@
 # Contributing to lazycwl
 
-lazycwl へのコントリビュートに興味を持っていただきありがとうございます。
+Thank you for your interest in contributing to lazycwl!
 
-## 開発環境のセットアップ
+## Development Setup
 
-### 前提条件
+### Prerequisites
 
-- [Nix](https://nixos.org/download.html)（Flake対応）
+- [Nix](https://nixos.org/download.html) (with Flakes enabled)
 - [Docker](https://docs.docker.com/get-docker/) / Docker Compose
 
-### セットアップ手順
+### Getting Started
 
 ```bash
-# 1. リポジトリをクローン
+# 1. Clone the repository
 git clone https://github.com/myuron/lazycwl.git
 cd lazycwl
 
-# 2. 開発環境に入る（Go、各種ツールが利用可能になる）
+# 2. Enter the development environment (provides Go and other tools)
 nix develop
 
-# 3. 依存解決
+# 3. Install dependencies
 go mod tidy
 
-# 4. テストを実行して環境を確認
+# 4. Run tests to verify your setup
 go test ./...
 ```
 
-### ローカル動作確認（AWS環境不要）
+### Local Testing (No AWS Required)
 
-floci を使ってローカルで動作確認できます。詳細は [README.md の Local Development セクション](README.md#local-development-floci) を参照してください。
+You can test locally using floci. See the [Local Development section in README.md](README.md#local-development-floci) for details.
 
-## 開発の進め方
+## Development Workflow
 
-### 1. Issue を確認する
+### 1. Check Issues
 
-まず [Issues](https://github.com/myuron/lazycwl/issues) を確認してください。取り組みたい Issue があればコメントで意思表示をお願いします。新しい機能の提案はまず Issue を作成して議論してください。
+Start by checking [Issues](https://github.com/myuron/lazycwl/issues). If you'd like to work on an issue, leave a comment to let us know. For new feature proposals, please create an issue first for discussion.
 
-### 2. ブランチを作成する
+### 2. Create a Branch
 
 ```bash
 git checkout -b <type>/<short-description>
 ```
 
-ブランチ名の例:
+Branch name examples:
 - `feat/preview-pane`
 - `fix/cursor-reset-on-paginate`
 - `docs/keybind-table`
 
-### 3. TDDで実装する
+### 3. Develop with TDD
 
-このプロジェクトではTDD（テスト駆動開発）を採用しています。
+This project follows TDD (Test-Driven Development).
 
-1. **Red**: 失敗するテストを先に書く
-2. **Green**: テストを通す最小限のコードを書く
-3. **Refactor**: コードを整理する（テストが通る状態を維持）
+1. **Red**: Write a failing test first
+2. **Green**: Write the minimal code to make the test pass
+3. **Refactor**: Clean up the code (keeping tests passing)
 
 ```bash
-# テスト実行
+# Run all tests
 go test ./...
 
-# 特定パッケージのテスト
+# Run tests for a specific package
 go test ./internal/tui/...
 ```
 
-### 4. コードスタイル
+### 4. Code Style
 
-- `gofmt` / `goimports` でフォーマットする
-- コード内のコメントは英語で書く
-- エラーは `fmt.Errorf("doing X: %w", err)` でラップして呼び出し元に返す
-- Bubble Tea の Model / Update / View パターンを遵守する
-- `Update` 内で直接I/Oを行わず、副作用は `tea.Cmd` で実行する
+- Format with `gofmt` / `goimports`
+- Write code comments in English
+- Wrap errors with `fmt.Errorf("doing X: %w", err)` and return them to the caller
+- Follow Bubble Tea's Model / Update / View pattern
+- Never perform I/O directly in `Update` — use `tea.Cmd` for side effects
 
-### 5. コミットする
+### 5. Commit
 
-[Conventional Commits](https://www.conventionalcommits.org/) に従ってください。コミットメッセージは日本語で書きます（プレフィックスは英語）。
+Follow [Conventional Commits](https://www.conventionalcommits.org/). Commit messages are written in Japanese (with English prefixes).
 
 ```
 feat: ロググループ一覧表示を実装
@@ -83,31 +83,31 @@ refactor: TUIモデルの状態管理を整理
 docs: READMEにキーバインド表を追加
 ```
 
-### 6. Pull Request を作成する
+### 6. Create a Pull Request
 
-- PRタイトルはコミットメッセージと同じ Conventional Commits 形式にする
-- テンプレートに沿って説明を記入する
-- テストが通っていることを確認する
+- Use the Conventional Commits format for the PR title
+- Fill in the description following the template
+- Make sure all tests pass
 
-## プロジェクト構成
+## Project Structure
 
 ```
 lazycwl/
-├── main.go                   # エントリーポイント
+├── main.go                   # Entry point
 ├── internal/
-│   ├── aws/                  # AWS CloudWatch Logs APIクライアント
-│   ├── tui/                  # Bubble Tea TUIレイヤー
-│   ├── editor/               # $EDITOR連携
-│   └── formatter/            # ログイベントのフォーマット
+│   ├── aws/                  # AWS CloudWatch Logs API client
+│   ├── tui/                  # Bubble Tea TUI layer
+│   ├── editor/               # $EDITOR integration
+│   └── formatter/            # Log event formatting
 ├── docs/
-│   └── requirements.md       # 要件定義書
-└── CLAUDE.md                 # Claude Code用の開発ガイドライン
+│   └── requirements.md       # Requirements specification
+└── CLAUDE.md                 # Development guidelines for Claude Code
 ```
 
-実装の詳細は `CLAUDE.md` と `docs/requirements.md` を参照してください。
+See `CLAUDE.md` and `docs/requirements.md` for implementation details.
 
-## 注意事項
+## Important Notes
 
-- `docs/requirements.md` のスコープ外の機能は実装しない
-- テストなしのコードはマージされない
-- `internal/` 外に実装コードを配置しない
+- Do not implement features outside the scope of `docs/requirements.md`
+- Code without tests will not be merged
+- Do not place implementation code outside of `internal/`

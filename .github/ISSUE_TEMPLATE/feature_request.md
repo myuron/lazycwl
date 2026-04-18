@@ -1,22 +1,22 @@
 ---
 name: Feature Request
-about: 機能の提案
+about: Suggest a new feature
 title: "feat: "
 labels: enhancement
 ---
 
-## 概要
+## Summary
 
-どんな機能がほしいかを簡潔に記述してください。
+Briefly describe the feature you'd like.
 
-## 背景・動機
+## Motivation
 
-なぜこの機能が必要かを記述してください。どんな場面で困っているかを具体的に書いていただけると助かります。
+Why is this feature needed? Describe the specific use case or problem you're facing.
 
-## 提案する解決策
+## Proposed Solution
 
-実現方法のアイデアがあれば記述してください。（任意）
+If you have an idea for how to implement this, describe it here. (Optional)
 
-## 備考
+## Notes
 
-`docs/requirements.md` のスコープ外の機能は対応できない場合があります。
+Features outside the scope of `docs/requirements.md` may not be accepted.

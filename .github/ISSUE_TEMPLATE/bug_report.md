@@ -1,31 +1,31 @@
 ---
 name: Bug Report
-about: バグの報告
+about: Report a bug
 title: "fix: "
 labels: bug
 ---
 
-## 現象
+## Description
 
-何が起きたかを簡潔に記述してください。
+Briefly describe what happened.
 
-## 再現手順
+## Steps to Reproduce
 
-1. `lazycwl` を起動する
+1. Run `lazycwl`
 2. ...
 3. ...
 
-## 期待する動作
+## Expected Behavior
 
-本来どうなるべきかを記述してください。
+Describe what should have happened.
 
-## 実際の動作
+## Actual Behavior
 
-実際に何が起きたかを記述してください。スクリーンショットやログがあれば添付してください。
+Describe what actually happened. Attach screenshots or logs if available.
 
-## 環境
+## Environment
 
-- OS: (例: macOS 15.3, Ubuntu 24.04)
-- ターミナル: (例: iTerm2, Alacritty, WezTerm)
-- lazycwl バージョン: (例: v0.1.0 または commit hash)
-- Go バージョン: (例: 1.23.0)
+- OS: (e.g., macOS 15.3, Ubuntu 24.04)
+- Terminal: (e.g., iTerm2, Alacritty, WezTerm)
+- lazycwl version: (e.g., v0.1.0 or commit hash)
+- Go version: (e.g., 1.23.0)

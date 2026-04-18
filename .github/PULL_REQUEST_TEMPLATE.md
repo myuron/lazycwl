@@ -1,17 +1,17 @@
-## 概要
+## Summary
 
-変更内容を簡潔に記述してください。
+Briefly describe the changes.
 
-## 関連 Issue
+## Related Issue
 
 closes #
 
-## 変更内容
+## Changes
 
 - 
 
-## テスト
+## Checklist
 
-- [ ] `go test ./...` が通ることを確認した
-- [ ] 新規コードに対するテストを追加した
-- [ ] ローカルで動作確認した
+- [ ] `go test ./...` passes
+- [ ] Tests added for new code
+- [ ] Verified locally

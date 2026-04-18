@@ -241,16 +241,6 @@ func (m Model) fetchMoreStreams() tea.Cmd {
 	}
 }
 
-func (m Model) fetchLogEvents(groupName, streamName string) tea.Cmd {
-	return func() tea.Msg {
-		events, err := m.client.GetLogEvents(m.ctx, groupName, streamName)
-		if err != nil {
-			return errMsg{err}
-		}
-		return logEventsMsg(events)
-	}
-}
-
 func (m Model) fetchMultiLogEvents(groupName string, streamNames []string) tea.Cmd {
 	return func() tea.Msg {
 		events, err := m.client.GetMultiStreamLogEvents(m.ctx, groupName, streamNames)

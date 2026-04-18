@@ -14,18 +14,18 @@ func WriteTempFile(content string) (string, func(), error) {
 	}
 
 	if _, err := f.WriteString(content); err != nil {
-		f.Close()
-		os.Remove(f.Name())
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 		return "", nil, fmt.Errorf("writing temp file: %w", err)
 	}
 
 	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", nil, fmt.Errorf("closing temp file: %w", err)
 	}
 
 	cleanup := func() {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 	}
 
 	return f.Name(), cleanup, nil

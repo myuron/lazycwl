@@ -35,10 +35,10 @@ func (m Model) viewSimple() string {
 			if i == m.cursor {
 				cursor = ">"
 			}
-			b.WriteString(fmt.Sprintf("%s %s (retention: %dd, size: %dB)\n", cursor, g.Name, g.RetentionDays, g.StoredBytes))
+			fmt.Fprintf(&b, "%s %s (retention: %dd, size: %dB)\n", cursor, g.Name, g.RetentionDays, g.StoredBytes)
 		}
 	case viewStreams:
-		b.WriteString(fmt.Sprintf("Log Streams — %s\n\n", m.selectedGroup))
+		fmt.Fprintf(&b, "Log Streams — %s\n\n", m.selectedGroup)
 		for i, s := range m.sortedStreams(m.filteredStreams()) {
 			cursor := " "
 			if i == m.cursor {
@@ -48,7 +48,7 @@ func (m Model) viewSimple() string {
 			if m.selected[s.Name] {
 				mark = "*"
 			}
-			b.WriteString(fmt.Sprintf("%s%s %s (%s)\n", cursor, mark, s.Name, s.LastEventTimestamp.Format("2006-01-02 15:04:05")))
+			fmt.Fprintf(&b, "%s%s %s (%s)\n", cursor, mark, s.Name, s.LastEventTimestamp.Format("2006-01-02 15:04:05"))
 		}
 	}
 

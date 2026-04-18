@@ -84,10 +84,10 @@ func groupName(idx int) string {
 
 func streamName(groupIdx, streamIdx int) string {
 	p := prefixes[groupIdx%len(prefixes)]
-	switch {
-	case p == "/aws/lambda":
+	switch p {
+	case "/aws/lambda":
 		return fmt.Sprintf("2026/04/14/[$LATEST]%08x_s%d", rand.Int31(), streamIdx)
-	case p == "/aws/ecs":
+	case "/aws/ecs":
 		return fmt.Sprintf("ecs/task-%06x/%d", rand.Int31n(0xffffff), streamIdx)
 	default:
 		return fmt.Sprintf("i-%08x-%d", rand.Int31(), streamIdx)
@@ -137,11 +137,11 @@ func main() {
 	fmt.Print("Creating groups...")
 	for g := 0; g < *numGroups; g++ {
 		name := groupName(g)
-		client.CreateLogGroup(ctx, &cloudwatchlogs.CreateLogGroupInput{
+		_, _ = client.CreateLogGroup(ctx, &cloudwatchlogs.CreateLogGroupInput{
 			LogGroupName: awssdk.String(name),
 		})
 		ret := retentions[g%len(retentions)]
-		client.PutRetentionPolicy(ctx, &cloudwatchlogs.PutRetentionPolicyInput{
+		_, _ = client.PutRetentionPolicy(ctx, &cloudwatchlogs.PutRetentionPolicyInput{
 			LogGroupName:    awssdk.String(name),
 			RetentionInDays: awssdk.Int32(ret),
 		})

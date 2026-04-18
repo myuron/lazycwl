@@ -74,8 +74,9 @@ type Model struct {
 	logStreams    []aws.LogStream
 	selectedGroup string
 
-	searchQuery string
-	selected    map[string]bool // multi-select stream names
+	searchQuery    string
+	sortDescending bool
+	selected       map[string]bool // multi-select stream names
 
 	groupsNextToken  *string
 	streamsNextToken *string
@@ -97,10 +98,11 @@ type Options struct {
 func NewModel(client *aws.Client) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
-		ctx:         ctx,
-		cancel:      cancel,
-		client:      client,
-		currentView: viewGroups,
+		ctx:            ctx,
+		cancel:         cancel,
+		client:         client,
+		currentView:    viewGroups,
+		sortDescending: true,
 	}
 }
 
@@ -108,10 +110,11 @@ func NewModel(client *aws.Client) Model {
 func NewModelWithOptions(client *aws.Client, opts Options) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := Model{
-		ctx:         ctx,
-		cancel:      cancel,
-		client:      client,
-		currentView: viewGroups,
+		ctx:            ctx,
+		cancel:         cancel,
+		client:         client,
+		currentView:    viewGroups,
+		sortDescending: true,
 	}
 	if opts.InitialGroup != "" {
 		m.selectedGroup = opts.InitialGroup
@@ -215,8 +218,9 @@ func (m Model) fetchMoreGroups() tea.Cmd {
 }
 
 func (m Model) fetchLogStreams(groupName string) tea.Cmd {
+	descending := m.sortDescending
 	return func() tea.Msg {
-		streams, nextToken, err := m.client.ListLogStreamsPage(m.ctx, groupName, nil)
+		streams, nextToken, err := m.client.ListLogStreamsPage(m.ctx, groupName, nil, descending)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -227,8 +231,9 @@ func (m Model) fetchLogStreams(groupName string) tea.Cmd {
 func (m Model) fetchMoreStreams() tea.Cmd {
 	token := m.streamsNextToken
 	groupName := m.selectedGroup
+	descending := m.sortDescending
 	return func() tea.Msg {
-		streams, nextToken, err := m.client.ListLogStreamsPage(m.ctx, groupName, token)
+		streams, nextToken, err := m.client.ListLogStreamsPage(m.ctx, groupName, token, descending)
 		if err != nil {
 			return errMsg{err}
 		}

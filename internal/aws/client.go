@@ -136,12 +136,13 @@ func (c *Client) ListLogGroups(ctx context.Context) ([]LogGroup, error) {
 }
 
 // ListLogStreamsPage returns one page of log streams with the given token.
-func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, nextToken *string) ([]LogStream, *string, error) {
+// descending controls the sort order by last event time.
+func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, nextToken *string, descending bool) ([]LogStream, *string, error) {
 	out, err := c.api.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
 		LogGroupName: awssdk.String(logGroupName),
 		NextToken:    nextToken,
 		OrderBy:      types.OrderByLastEventTime,
-		Descending:   awssdk.Bool(true),
+		Descending:   awssdk.Bool(descending),
 		Limit:        awssdk.Int32(defaultPageSize),
 	})
 	if err != nil {
@@ -167,9 +168,9 @@ func (c *Client) ListLogStreamsPage(ctx context.Context, logGroupName string, ne
 	return streams, out.NextToken, nil
 }
 
-// ListLogStreams returns log streams for a given log group (first page).
+// ListLogStreams returns log streams for a given log group (first page, descending).
 func (c *Client) ListLogStreams(ctx context.Context, logGroupName string) ([]LogStream, error) {
-	streams, _, err := c.ListLogStreamsPage(ctx, logGroupName, nil)
+	streams, _, err := c.ListLogStreamsPage(ctx, logGroupName, nil, true)
 	return streams, err
 }
 

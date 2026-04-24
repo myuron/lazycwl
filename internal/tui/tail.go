@@ -70,7 +70,7 @@ func (m Model) startTailStream(ctx context.Context, groupARN string, streamNames
 		// Pump events from the AWS EventStream into our channel in a goroutine.
 		go func() {
 			defer close(eventsCh)
-			defer stream.Close()
+			defer func() { _ = stream.Close() }()
 
 			for event := range stream.Events() {
 				switch v := event.(type) {

@@ -114,3 +114,10 @@
 - [x] 2026-04-23 スクロール（j/k/g/G）、一時停止/再開（p）、終了（q/Esc）のキーバインド実装
 - [x] 2026-04-23 tail_test.go: 27テスト作成（入力バリデーション、イベント処理、スクロール、描画、状態遷移）
 - [x] 2026-04-23 keys.go にfキーバインド追加、preview.go にviewTailケースとステータスバーヒント追加
+
+## レビュー指摘事項 (PR #22 ultrareview)
+- [x] 2026-04-25 merged_bug_001: tailEventMsg でPause/スクロール中の表示位置固定（offset += added + maxOffsetでclamp）+ 4テスト追加
+- [x] 2026-04-25 bug_004: tailErrMsg に viewTail ガード追加（終了直後の "tail stream closed" 誤表示修正）+ テスト追加
+- [x] 2026-04-25 bug_017: tailErrCh追加、stream.Err()をerrCh経由で surface、waitForTailEventで優先読み取り + 2テスト追加
+- [x] 2026-04-25 bug_005: G キーで tailPaused=false にして auto-scroll 再開 + テスト追加
+- [x] 2026-04-25 bug_018: マルチ選択ストリーム名を sort.Strings で決定的順序に + テスト追加

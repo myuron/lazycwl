@@ -3,12 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	tea "github.com/charmbracelet/bubbletea"
 	localaws "github.com/myuron/lazycwl/internal/aws"
 )
 
@@ -27,6 +28,9 @@ func (m Model) enterTailMode() (tea.Model, tea.Cmd) {
 		for name := range m.selected {
 			streamNames = append(streamNames, name)
 		}
+		// Map iteration is randomized; sort so the header and AWS request
+		// are deterministic across runs with the same multi-selection.
+		sort.Strings(streamNames)
 	} else {
 		if m.cursor < len(streams) {
 			streamNames = []string{streams[m.cursor].Name}
@@ -50,13 +54,15 @@ func (m Model) enterTailMode() (tea.Model, tea.Cmd) {
 	m.tailCancel = tailCancel
 
 	eventsCh := make(chan localaws.LogEvent, 100)
+	errCh := make(chan error, 1)
 	m.tailEventsCh = eventsCh
+	m.tailErrCh = errCh
 
-	return m, m.startTailStream(tailCtx, groupIdentifier, streamNames, eventsCh)
+	return m, m.startTailStream(tailCtx, groupIdentifier, streamNames, eventsCh, errCh)
 }
 
 // startTailStream starts the live tail API call and pumps events into the channel.
-func (m Model) startTailStream(ctx context.Context, groupARN string, streamNames []string, eventsCh chan<- localaws.LogEvent) tea.Cmd {
+func (m Model) startTailStream(ctx context.Context, groupARN string, streamNames []string, eventsCh chan<- localaws.LogEvent, errCh chan<- error) tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
 		out, err := client.StartLiveTailSession(ctx, groupARN, streamNames)
@@ -69,8 +75,8 @@ func (m Model) startTailStream(ctx context.Context, groupARN string, streamNames
 
 		// Pump events from the AWS EventStream into our channel in a goroutine.
 		go func() {
-			defer close(eventsCh)
 			defer func() { _ = stream.Close() }()
+			defer close(eventsCh)
 
 			for event := range stream.Events() {
 				switch v := event.(type) {
@@ -94,6 +100,14 @@ func (m Model) startTailStream(ctx context.Context, groupARN string, streamNames
 					// Session started, no action needed
 				}
 			}
+			// The AWS EventStream surfaces transport/protocol errors
+			// (SessionTimeoutException, ExpiredTokenException, throttling,
+			// network drops) only via Err() after Events() closes. Forward
+			// it so waitForTailEvent can report the real cause instead of a
+			// generic "tail stream closed".
+			if err := stream.Err(); err != nil && ctx.Err() == nil {
+				errCh <- err
+			}
 		}()
 
 		return tailStartedMsg{}
@@ -103,12 +117,24 @@ func (m Model) startTailStream(ctx context.Context, groupARN string, streamNames
 // waitForTailEvent returns a tea.Cmd that waits for the next event from the channel.
 func (m Model) waitForTailEvent() tea.Cmd {
 	ch := m.tailEventsCh
+	errCh := m.tailErrCh
 	if ch == nil {
 		return nil
 	}
 	return func() tea.Msg {
 		event, ok := <-ch
 		if !ok {
+			// Events channel closed. If a real error was recorded on errCh
+			// before close, surface it; otherwise this is a clean shutdown.
+			if errCh != nil {
+				select {
+				case err, ok := <-errCh:
+					if ok && err != nil {
+						return tailErrMsg{err}
+					}
+				default:
+				}
+			}
 			return tailErrMsg{fmt.Errorf("tail stream closed")}
 		}
 		// Drain any buffered events to batch them
@@ -152,6 +178,7 @@ func (m Model) exitTailMode() (tea.Model, tea.Cmd) {
 	m.tailEvents = nil
 	m.tailStreams = nil
 	m.tailEventsCh = nil
+	m.tailErrCh = nil
 	m.tailPaused = false
 	m.tailScrollOffset = 0
 	return m, nil
@@ -182,7 +209,10 @@ func (m Model) handleTailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.tailScrollToTop()
 			return m, nil
 		case "G":
+			// F16: "G 押下で最下部に戻り自動スクロールを再開".
+			// Auto-scroll is a live-mode behaviour, so also clear paused.
 			m.tailScrollOffset = 0
+			m.tailPaused = false
 			return m, nil
 		case "p":
 			m.tailPaused = !m.tailPaused

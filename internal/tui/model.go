@@ -12,7 +12,7 @@ import (
 type viewState int
 
 const (
-	viewGroups  viewState = iota
+	viewGroups viewState = iota
 	viewStreams
 	viewTail
 )
@@ -20,7 +20,7 @@ const (
 type inputMode int
 
 const (
-	modeNormal    inputMode = iota
+	modeNormal inputMode = iota
 	modeSearch
 )
 
@@ -93,17 +93,18 @@ type Model struct {
 	groupsNextToken  *string
 	streamsNextToken *string
 
-	loading    bool
+	loading     bool
 	loadingMore bool
-	err        error
+	err         error
 
 	// Tail mode state
 	tailEvents       []aws.LogEvent
-	tailStreams       []string
+	tailStreams      []string
 	tailCancel       context.CancelFunc
 	tailPaused       bool
 	tailScrollOffset int // offset from the bottom (0 = at bottom, auto-scroll)
 	tailEventsCh     <-chan aws.LogEvent
+	tailErrCh        <-chan error // set when the live tail goroutine surfaces stream.Err()
 
 	width  int
 	height int
@@ -203,16 +204,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.currentView != viewTail {
 			return m, nil
 		}
-		trimmed := m.appendTailEvents(msg.events)
-		if m.tailScrollOffset > 0 {
-			m.tailScrollOffset -= trimmed
-			if m.tailScrollOffset < 0 {
-				m.tailScrollOffset = 0
+		added := len(msg.events)
+		m.appendTailEvents(msg.events)
+		// Pin the visible window when the user is either paused or scrolled
+		// up to read older events. endIdx = totalEvents - tailScrollOffset,
+		// so to keep endIdx pointing at the same absolute event we bump
+		// scrollOffset by the number of newly added events (independent of
+		// how many were trimmed from the front).
+		if m.tailPaused || m.tailScrollOffset > 0 {
+			m.tailScrollOffset += added
+			maxOffset := len(m.tailEvents) - m.tailVisibleLines()
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			if m.tailScrollOffset > maxOffset {
+				m.tailScrollOffset = maxOffset
 			}
 		}
 		return m, m.waitForTailEvent()
 
 	case tailErrMsg:
+		// A closed events channel after a user-initiated exit can deliver a
+		// stale tailErrMsg; ignore anything that arrives once tail mode is
+		// already gone.
+		if m.currentView != viewTail {
+			return m, nil
+		}
 		m.err = msg.err
 		return m.exitTailMode()
 

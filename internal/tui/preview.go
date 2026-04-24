@@ -76,13 +76,13 @@ func (m Model) viewTwoColumn() string {
 	}
 
 	leftStyle := lipgloss.NewStyle().
-		Width(leftWidth - 2).
+		Width(leftWidth-2).
 		Height(contentHeight).
 		Padding(0, 1).
 		BorderStyle(lipgloss.RoundedBorder())
 
 	rightStyle := lipgloss.NewStyle().
-		Width(rightWidth - 2).
+		Width(rightWidth-2).
 		Height(contentHeight).
 		Padding(0, 1).
 		BorderStyle(lipgloss.RoundedBorder())
@@ -252,7 +252,6 @@ func (m Model) renderStreamList(maxHeight int) string {
 	return b.String()
 }
 
-
 func (m Model) renderInputLine() string {
 	switch m.mode {
 	case modeSearch:
@@ -293,4 +292,3 @@ func capPaneLines(lines []string, n int) []string {
 	capped = append(capped, lines[len(lines)-1])
 	return capped
 }
-

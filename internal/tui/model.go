@@ -14,6 +14,7 @@ type viewState int
 const (
 	viewGroups  viewState = iota
 	viewStreams
+	viewTail
 )
 
 type inputMode int
@@ -53,6 +54,17 @@ type logEventsMsg []aws.LogEvent
 // editorFinishedMsg is sent when the editor process exits.
 type editorFinishedMsg struct{ err error }
 
+// tailEventMsg delivers new events from a live tail stream.
+type tailEventMsg struct {
+	events []aws.LogEvent
+}
+
+// tailErrMsg is sent when an error occurs in the live tail stream.
+type tailErrMsg struct{ err error }
+
+// tailStartedMsg is sent when the live tail session starts.
+type tailStartedMsg struct{}
+
 // errMsg is sent when an error occurs.
 type errMsg struct{ err error }
 
@@ -84,6 +96,14 @@ type Model struct {
 	loading    bool
 	loadingMore bool
 	err        error
+
+	// Tail mode state
+	tailEvents       []aws.LogEvent
+	tailStreams       []string
+	tailCancel       context.CancelFunc
+	tailPaused       bool
+	tailScrollOffset int // offset from the bottom (0 = at bottom, auto-scroll)
+	tailEventsCh     <-chan aws.LogEvent
 
 	width  int
 	height int
@@ -178,6 +198,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		}
 		return m, nil
+
+	case tailEventMsg:
+		if m.currentView != viewTail {
+			return m, nil
+		}
+		trimmed := m.appendTailEvents(msg.events)
+		if m.tailScrollOffset > 0 {
+			m.tailScrollOffset -= trimmed
+			if m.tailScrollOffset < 0 {
+				m.tailScrollOffset = 0
+			}
+		}
+		return m, m.waitForTailEvent()
+
+	case tailErrMsg:
+		m.err = msg.err
+		return m.exitTailMode()
+
+	case tailStartedMsg:
+		return m, m.waitForTailEvent()
 
 	case errMsg:
 		m.err = msg.err
@@ -278,6 +318,16 @@ func (m *Model) adjustOffset() {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+}
+
+// selectedGroupARN returns the ARN of the currently selected log group.
+func (m Model) selectedGroupARN() string {
+	for _, g := range m.logGroups {
+		if g.Name == m.selectedGroup {
+			return g.ARN
+		}
+	}
+	return ""
 }
 
 func (m Model) hasMoreGroups() bool {

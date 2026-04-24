@@ -5,6 +5,15 @@ import (
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.currentView == viewTail {
+		return m.handleTailKey(msg)
+	}
+
+	// Clear non-fatal errors on any key press.
+	if m.err != nil && len(m.logGroups) > 0 {
+		m.err = nil
+	}
+
 	listLen := m.currentListLen()
 
 	switch msg.Type {
@@ -73,6 +82,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.searchQuery = ""
 			m.cursor = 0
 			m.offset = 0
+			return m, nil
+		case "f":
+			if m.currentView == viewStreams {
+				return m.enterTailMode()
+			}
 			return m, nil
 		case "s":
 			if m.currentView == viewStreams {

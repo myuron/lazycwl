@@ -13,8 +13,14 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	if m.err != nil {
+	// Show full-screen error only when no data is loaded (initial load failure).
+	// Otherwise, errors are shown in the status bar.
+	if m.err != nil && len(m.logGroups) == 0 {
 		return fmt.Sprintf("Error: %v\n\nPress q to quit.", m.err)
+	}
+
+	if m.currentView == viewTail {
+		return m.renderTailView()
 	}
 
 	if m.width == 0 {
@@ -260,7 +266,16 @@ func (m Model) renderStatusBar() string {
 	if !m.sortDescending {
 		sortStr = "time ↑"
 	}
-	return fmt.Sprintf(" Sort: %s | q: quit | /: search | s: sort", sortStr)
+	var bar string
+	if m.currentView == viewStreams {
+		bar = fmt.Sprintf(" Sort: %s | q: quit | /: search | s: sort | f: follow", sortStr)
+	} else {
+		bar = fmt.Sprintf(" Sort: %s | q: quit | /: search | s: sort", sortStr)
+	}
+	if m.err != nil {
+		bar = fmt.Sprintf(" Error: %v | %s", m.err, bar[1:])
+	}
+	return bar
 }
 
 // capPaneLines ensures a bordered pane has exactly n lines by keeping the

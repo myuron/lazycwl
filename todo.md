@@ -102,3 +102,15 @@
 - [x] 2026-04-18 テスト追加: OrderBy/Descending/Limit パラメータの検証
 - [x] 2026-04-18 実装修正: ListLogStreamsPage に OrderBy=LastEventTime, Descending=true, Limit=50 を追加
 - [x] 2026-04-18 リファクタ: ListLogStreams を ListLogStreamsPage のラッパーに簡略化
+
+## リアルタイム監視 (F16)
+- [x] 2026-04-23 要件定義書にF16を追加、スコープ外からtailの記述を削除
+- [x] 2026-04-23 LogsClientインターフェースにStartLiveTailを追加
+- [x] 2026-04-23 LogGroup構造体にARNフィールドを追加
+- [x] 2026-04-23 Client.StartLiveTailSessionラッパーメソッド追加 + テスト
+- [x] 2026-04-23 viewTail状態、tailEventMsg/tailErrMsg/tailStartedMsg メッセージ型追加
+- [x] 2026-04-23 Model にtail関連フィールド追加（tailEvents, tailStreams, tailCancel, tailPaused, tailScrollOffset, tailEventsCh）
+- [x] 2026-04-23 tail.go: enterTailMode, exitTailMode, handleTailKey, startTailStream, waitForTailEvent, renderTailView 実装
+- [x] 2026-04-23 スクロール（j/k/g/G）、一時停止/再開（p）、終了（q/Esc）のキーバインド実装
+- [x] 2026-04-23 tail_test.go: 27テスト作成（入力バリデーション、イベント処理、スクロール、描画、状態遷移）
+- [x] 2026-04-23 keys.go にfキーバインド追加、preview.go にviewTailケースとステータスバーヒント追加

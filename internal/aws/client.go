@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,11 +25,13 @@ type LogsClient interface {
 	DescribeLogGroups(ctx context.Context, params *cloudwatchlogs.DescribeLogGroupsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogGroupsOutput, error)
 	DescribeLogStreams(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error)
 	GetLogEvents(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error)
+	StartLiveTail(ctx context.Context, params *cloudwatchlogs.StartLiveTailInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartLiveTailOutput, error)
 }
 
 // LogGroup represents a CloudWatch Logs log group.
 type LogGroup struct {
 	Name          string
+	ARN           string
 	RetentionDays int32
 	StoredBytes   int64
 }
@@ -91,19 +94,7 @@ func (c *Client) ListLogGroupsPage(ctx context.Context, nextToken *string) ([]Lo
 
 	groups := make([]LogGroup, 0, len(out.LogGroups))
 	for _, g := range out.LogGroups {
-		var retention int32
-		if g.RetentionInDays != nil {
-			retention = *g.RetentionInDays
-		}
-		var stored int64
-		if g.StoredBytes != nil {
-			stored = *g.StoredBytes
-		}
-		groups = append(groups, LogGroup{
-			Name:          awssdk.ToString(g.LogGroupName),
-			RetentionDays: retention,
-			StoredBytes:   stored,
-		})
+		groups = append(groups, toLogGroup(g))
 	}
 	return groups, out.NextToken, nil
 }
@@ -117,21 +108,48 @@ func (c *Client) ListLogGroups(ctx context.Context) ([]LogGroup, error) {
 
 	groups := make([]LogGroup, 0, len(out.LogGroups))
 	for _, g := range out.LogGroups {
-		var retention int32
-		if g.RetentionInDays != nil {
-			retention = *g.RetentionInDays
-		}
-		var stored int64
-		if g.StoredBytes != nil {
-			stored = *g.StoredBytes
-		}
-		groups = append(groups, LogGroup{
-			Name:          awssdk.ToString(g.LogGroupName),
-			RetentionDays: retention,
-			StoredBytes:   stored,
-		})
+		groups = append(groups, toLogGroup(g))
 	}
 	return groups, nil
+}
+
+func toLogGroup(g types.LogGroup) LogGroup {
+	var retention int32
+	if g.RetentionInDays != nil {
+		retention = *g.RetentionInDays
+	}
+	var stored int64
+	if g.StoredBytes != nil {
+		stored = *g.StoredBytes
+	}
+	// Prefer Arn (without trailing :*), fall back to LogGroupArn (strip :*).
+	arn := awssdk.ToString(g.Arn)
+	if arn == "" {
+		arn = strings.TrimSuffix(awssdk.ToString(g.LogGroupArn), ":*")
+	}
+	return LogGroup{
+		Name:          awssdk.ToString(g.LogGroupName),
+		ARN:           arn,
+		RetentionDays: retention,
+		StoredBytes:   stored,
+	}
+}
+
+// StartLiveTailSession starts a live tail streaming session for the given
+// log group ARN and optional stream names. The caller is responsible for
+// reading from the returned event stream and closing it.
+func (c *Client) StartLiveTailSession(ctx context.Context, logGroupARN string, streamNames []string) (*cloudwatchlogs.StartLiveTailOutput, error) {
+	input := &cloudwatchlogs.StartLiveTailInput{
+		LogGroupIdentifiers: []string{logGroupARN},
+	}
+	if len(streamNames) > 0 {
+		input.LogStreamNames = streamNames
+	}
+	out, err := c.api.StartLiveTail(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("starting live tail: %w", err)
+	}
+	return out, nil
 }
 
 // ListLogStreamsPage returns one page of log streams with the given token.

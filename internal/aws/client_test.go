@@ -17,6 +17,7 @@ type mockLogsAPI struct {
 	describeLogGroupsFn  func(ctx context.Context, params *cloudwatchlogs.DescribeLogGroupsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogGroupsOutput, error)
 	describeLogStreamsFn func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error)
 	getLogEventsFn       func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error)
+	startLiveTailFn      func(ctx context.Context, params *cloudwatchlogs.StartLiveTailInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartLiveTailOutput, error)
 }
 
 func (m *mockLogsAPI) DescribeLogGroups(ctx context.Context, params *cloudwatchlogs.DescribeLogGroupsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogGroupsOutput, error) {
@@ -31,18 +32,27 @@ func (m *mockLogsAPI) GetLogEvents(ctx context.Context, params *cloudwatchlogs.G
 	return m.getLogEventsFn(ctx, params, optFns...)
 }
 
+func (m *mockLogsAPI) StartLiveTail(ctx context.Context, params *cloudwatchlogs.StartLiveTailInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartLiveTailOutput, error) {
+	if m.startLiveTailFn != nil {
+		return m.startLiveTailFn(ctx, params, optFns...)
+	}
+	return nil, fmt.Errorf("startLiveTailFn not set")
+}
+
 func TestClient_ListLogGroups(t *testing.T) {
 	mock := &mockLogsAPI{
 		describeLogGroupsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogGroupsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogGroupsOutput, error) {
 			return &cloudwatchlogs.DescribeLogGroupsOutput{
 				LogGroups: []types.LogGroup{
 					{
-						LogGroupName: aws.String("/aws/lambda/func-a"),
+						LogGroupName:    aws.String("/aws/lambda/func-a"),
+						Arn:             aws.String("arn:aws:logs:ap-northeast-1:123456789012:log-group:/aws/lambda/func-a"),
 						RetentionInDays: aws.Int32(30),
 						StoredBytes:     aws.Int64(1024),
 					},
 					{
-						LogGroupName: aws.String("/aws/ecs/service-b"),
+						LogGroupName:    aws.String("/aws/ecs/service-b"),
+						Arn:             aws.String("arn:aws:logs:ap-northeast-1:123456789012:log-group:/aws/ecs/service-b"),
 						RetentionInDays: aws.Int32(7),
 						StoredBytes:     aws.Int64(2048),
 					},
@@ -64,11 +74,58 @@ func TestClient_ListLogGroups(t *testing.T) {
 	if groups[0].Name != "/aws/lambda/func-a" {
 		t.Errorf("expected group name /aws/lambda/func-a, got %s", groups[0].Name)
 	}
+	if groups[0].ARN != "arn:aws:logs:ap-northeast-1:123456789012:log-group:/aws/lambda/func-a" {
+		t.Errorf("expected ARN, got %s", groups[0].ARN)
+	}
 	if groups[0].RetentionDays != 30 {
 		t.Errorf("expected retention 30, got %d", groups[0].RetentionDays)
 	}
 	if groups[0].StoredBytes != 1024 {
 		t.Errorf("expected stored bytes 1024, got %d", groups[0].StoredBytes)
+	}
+}
+
+func TestClient_StartLiveTailSession(t *testing.T) {
+	mock := &mockLogsAPI{
+		startLiveTailFn: func(ctx context.Context, params *cloudwatchlogs.StartLiveTailInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartLiveTailOutput, error) {
+			if len(params.LogGroupIdentifiers) != 1 {
+				t.Errorf("expected 1 log group identifier, got %d", len(params.LogGroupIdentifiers))
+			}
+			if params.LogGroupIdentifiers[0] != "arn:aws:logs:ap-northeast-1:123456789012:log-group:/aws/lambda/func-a" {
+				t.Errorf("unexpected log group ARN: %s", params.LogGroupIdentifiers[0])
+			}
+			if len(params.LogStreamNames) != 2 {
+				t.Errorf("expected 2 stream names, got %d", len(params.LogStreamNames))
+			}
+			return &cloudwatchlogs.StartLiveTailOutput{}, nil
+		},
+	}
+
+	client := &Client{api: mock}
+	_, err := client.StartLiveTailSession(
+		context.Background(),
+		"arn:aws:logs:ap-northeast-1:123456789012:log-group:/aws/lambda/func-a",
+		[]string{"stream-001", "stream-002"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestClient_StartLiveTailSession_NoStreams(t *testing.T) {
+	mock := &mockLogsAPI{
+		startLiveTailFn: func(ctx context.Context, params *cloudwatchlogs.StartLiveTailInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.StartLiveTailOutput, error) {
+			if len(params.LogStreamNames) != 0 {
+				t.Errorf("expected no stream names, got %d", len(params.LogStreamNames))
+			}
+			return &cloudwatchlogs.StartLiveTailOutput{}, nil
+		},
+	}
+
+	client := &Client{api: mock}
+	_, err := client.StartLiveTailSession(context.Background(), "arn:test", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

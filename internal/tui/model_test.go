@@ -353,7 +353,6 @@ func TestModel_ViewTwoColumns_StreamsShowLastEvent(t *testing.T) {
 	}
 }
 
-
 // --- Phase 5: Search / Filter / Sort / Time range ---
 
 func TestModel_SearchMode_Enter(t *testing.T) {
@@ -880,7 +879,7 @@ func TestModel_PaneHeight_FewGroupsManyStreams(t *testing.T) {
 	m.height = 24
 	m.currentView = viewStreams
 	m.selectedGroup = "/aws/test"
-	m.logGroups = makeGroups(3)  // few groups
+	m.logGroups = makeGroups(3)    // few groups
 	m.logStreams = makeStreams(50) // many streams
 	m.groupCursor = 0
 
@@ -898,7 +897,7 @@ func TestModel_PaneHeight_ManyGroupsFewStreams(t *testing.T) {
 	m.height = 24
 	m.currentView = viewStreams
 	m.selectedGroup = "/aws/test"
-	m.logGroups = makeGroups(50) // many groups
+	m.logGroups = makeGroups(50)  // many groups
 	m.logStreams = makeStreams(2) // few streams
 	m.groupCursor = 0
 
@@ -956,10 +955,10 @@ func TestModel_RenderContentExactLines(t *testing.T) {
 	// Verify that renderGroupList and renderStreamList produce exactly maxHeight lines
 	// to prevent pane size mismatch when lipgloss Height enforcement varies across terminals.
 	tests := []struct {
-		name       string
-		groups     int
-		streams    int
-		maxHeight  int
+		name      string
+		groups    int
+		streams   int
+		maxHeight int
 	}{
 		{"few groups", 3, 0, 20},
 		{"many groups", 50, 0, 20},

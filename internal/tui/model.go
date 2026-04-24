@@ -12,14 +12,15 @@ import (
 type viewState int
 
 const (
-	viewGroups  viewState = iota
+	viewGroups viewState = iota
 	viewStreams
+	viewTail
 )
 
 type inputMode int
 
 const (
-	modeNormal    inputMode = iota
+	modeNormal inputMode = iota
 	modeSearch
 )
 
@@ -53,6 +54,17 @@ type logEventsMsg []aws.LogEvent
 // editorFinishedMsg is sent when the editor process exits.
 type editorFinishedMsg struct{ err error }
 
+// tailEventMsg delivers new events from a live tail stream.
+type tailEventMsg struct {
+	events []aws.LogEvent
+}
+
+// tailErrMsg is sent when an error occurs in the live tail stream.
+type tailErrMsg struct{ err error }
+
+// tailStartedMsg is sent when the live tail session starts.
+type tailStartedMsg struct{}
+
 // errMsg is sent when an error occurs.
 type errMsg struct{ err error }
 
@@ -81,9 +93,18 @@ type Model struct {
 	groupsNextToken  *string
 	streamsNextToken *string
 
-	loading    bool
+	loading     bool
 	loadingMore bool
-	err        error
+	err         error
+
+	// Tail mode state
+	tailEvents       []aws.LogEvent
+	tailStreams      []string
+	tailCancel       context.CancelFunc
+	tailPaused       bool
+	tailScrollOffset int // offset from the bottom (0 = at bottom, auto-scroll)
+	tailEventsCh     <-chan aws.LogEvent
+	tailErrCh        <-chan error // set when the live tail goroutine surfaces stream.Err()
 
 	width  int
 	height int
@@ -178,6 +199,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		}
 		return m, nil
+
+	case tailEventMsg:
+		if m.currentView != viewTail {
+			return m, nil
+		}
+		added := len(msg.events)
+		m.appendTailEvents(msg.events)
+		// Pin the visible window when the user is either paused or scrolled
+		// up to read older events. endIdx = totalEvents - tailScrollOffset,
+		// so to keep endIdx pointing at the same absolute event we bump
+		// scrollOffset by the number of newly added events (independent of
+		// how many were trimmed from the front).
+		if m.tailPaused || m.tailScrollOffset > 0 {
+			m.tailScrollOffset += added
+			maxOffset := len(m.tailEvents) - m.tailVisibleLines()
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			if m.tailScrollOffset > maxOffset {
+				m.tailScrollOffset = maxOffset
+			}
+		}
+		return m, m.waitForTailEvent()
+
+	case tailErrMsg:
+		// A closed events channel after a user-initiated exit can deliver a
+		// stale tailErrMsg; ignore anything that arrives once tail mode is
+		// already gone.
+		if m.currentView != viewTail {
+			return m, nil
+		}
+		m.err = msg.err
+		return m.exitTailMode()
+
+	case tailStartedMsg:
+		return m, m.waitForTailEvent()
 
 	case errMsg:
 		m.err = msg.err
@@ -278,6 +335,16 @@ func (m *Model) adjustOffset() {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+}
+
+// selectedGroupARN returns the ARN of the currently selected log group.
+func (m Model) selectedGroupARN() string {
+	for _, g := range m.logGroups {
+		if g.Name == m.selectedGroup {
+			return g.ARN
+		}
+	}
+	return ""
 }
 
 func (m Model) hasMoreGroups() bool {

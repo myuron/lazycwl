@@ -14,6 +14,8 @@ func (m Model) currentListLen() int {
 		return len(m.filteredGroups())
 	case viewStreams:
 		return len(m.filteredStreams())
+	case viewTail:
+		return len(m.tailEvents)
 	}
 	return 0
 }

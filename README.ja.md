@@ -12,6 +12,8 @@
 
 AWS CloudWatch Logsをターミナルで素早く閲覧・調査するためのTUIツール。yazi風の階層ナビゲーションでロググループ/ストリームをブラウズし、選択したログを`$EDITOR`で開いてVimベースの障害調査を行う。
 
+English: [README.md](README.md)
+
 ## インストール
 
 ```bash
@@ -65,10 +67,6 @@ lazycwl --group /aws/lambda/my-function
 lazycwl --group /aws/lambda/my-function --stream 'stream-name'
 ```
 
-## 注意事項
-
-- ログストリームはデフォルトで最終イベント時刻の降順でソートされる。一度もログイベントを受信していないストリームは、AWS APIが `OrderBy=LastEventTime` 指定時に除外するため、このモードでは**表示されない**。空のストリームも含めて全件表示するには、`s` キーでストリーム名順ソートに切り替える。
-
 ## キーバインド
 
 ### ノーマルモード
@@ -110,68 +108,6 @@ lazycwl --group /aws/lambda/my-function --stream 'stream-name'
 └───────────────────────────────────────────────────────┘
 ```
 
-## ローカル開発（floci）
-
-[floci](https://github.com/floci-io/floci)を使ってAWS環境なしで動作確認できる。
-
-### セットアップ
-
-```bash
-# 1. 開発環境に入る
-nix develop
-
-# 2. flociを起動
-docker compose up -d
-
-# 3. テストデータを投入
-./scripts/seed-testdata.sh
-
-# 4. lazycwlをfloci向けに起動
-AWS_ENDPOINT_URL=http://localhost:4566 \
-AWS_ACCESS_KEY_ID=test \
-AWS_SECRET_ACCESS_KEY=test \
-AWS_DEFAULT_REGION=ap-northeast-1 \
-go run .
-```
-
-### テストデータの内容
-
-seedスクリプトは以下のロググループとストリームを作成する:
-
-| ロググループ | ストリーム | 内容 |
-|---|---|---|
-| `/aws/lambda/api-handler` | `[$LATEST]abc123` | 正常なAPIリクエスト処理 |
-| `/aws/lambda/api-handler` | `[$LATEST]def456` | DB接続タイムアウトエラー |
-| `/aws/lambda/batch-processor` | `[$LATEST]ghi789` | バッチ処理（スロークエリ警告あり） |
-| `/aws/ecs/web-service` | `web-service/web/task-001` | Webサーバー起動、500エラー含む |
-| `/app/api/backend` | `i-0abc123def456` | サーキットブレーカー動作 |
-| `/app/worker/queue-consumer` | `worker-1` | キュー処理、決済エラー含む |
-
-### 大量テストデータの投入
-
-ページネーションやスクロール性能のテスト用に、大量データを生成するスクリプトも用意されている。
-
-```bash
-# デフォルト: 50グループ × 20ストリーム × 100イベント = 100,000イベント
-./scripts/seed-large-testdata.sh
-
-# オプションでカスタマイズ可能
-./scripts/seed-large-testdata.sh --groups 10 --streams 5 --events 50
-./scripts/seed-large-testdata.sh --groups 100 --streams 50 --events 500
-```
-
-| オプション | デフォルト | 説明 |
-|---|---|---|
-| `--groups` | 50 | 作成するロググループ数 |
-| `--streams` | 20 | グループあたりのストリーム数 |
-| `--events` | 100 | ストリームあたりのイベント数 |
-
-### flociの停止
-
-```bash
-docker compose down
-```
-
 ## Tips
 
 ### Vimでログを保存する
@@ -184,11 +120,10 @@ docker compose down
 
 必要な行だけ抽出・加工してから保存することもできる。これが障害調査の想定ワークフローとなっている。
 
-## 技術スタック
+## コントリビュート
 
-- [Go](https://go.dev/)
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUIフレームワーク
-- [Bubbles](https://github.com/charmbracelet/bubbles) — TUIコンポーネント
-- [Lip Gloss](https://github.com/charmbracelet/lipgloss) — スタイリング
-- [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2) — CloudWatch Logs API
-- [Nix Flake](https://nixos.wiki/wiki/Flakes) — ビルド管理
+バグ報告・機能提案・プルリクエストを歓迎する。開発環境のセットアップ、flociを使ったローカルテスト、TDDワークフローについては [CONTRIBUTING.md](CONTRIBUTING.md)（英語）を参照。
+
+## ライセンス
+
+[MIT](LICENSE)

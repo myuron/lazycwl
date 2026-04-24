@@ -26,9 +26,67 @@ go mod tidy
 go test ./...
 ```
 
-### Local Testing (No AWS Required)
+## Local Development with floci
 
-You can test locally using floci. See the [Local Development section in README.md](README.md#local-development-floci) for details.
+You can test lazycwl without a real AWS environment using [floci](https://github.com/floci-io/floci).
+
+### Setup
+
+```bash
+# 1. Enter the dev environment
+nix develop
+
+# 2. Start floci
+docker compose up -d
+
+# 3. Seed test data
+./scripts/seed-testdata.sh
+
+# 4. Run lazycwl against floci
+AWS_ENDPOINT_URL=http://localhost:4566 \
+AWS_ACCESS_KEY_ID=test \
+AWS_SECRET_ACCESS_KEY=test \
+AWS_DEFAULT_REGION=ap-northeast-1 \
+go run .
+```
+
+### Test Data
+
+The seed script creates the following log groups and streams:
+
+| Log Group | Stream | Content |
+|-----------|--------|---------|
+| `/aws/lambda/api-handler` | `[$LATEST]abc123` | Normal API request processing |
+| `/aws/lambda/api-handler` | `[$LATEST]def456` | DB connection timeout error |
+| `/aws/lambda/batch-processor` | `[$LATEST]ghi789` | Batch processing (with slow query warnings) |
+| `/aws/ecs/web-service` | `web-service/web/task-001` | Web server startup, includes 500 errors |
+| `/app/api/backend` | `i-0abc123def456` | Circuit breaker activation |
+| `/app/worker/queue-consumer` | `worker-1` | Queue processing, includes payment errors |
+
+### Large Test Data
+
+For testing pagination and scroll performance, a script for generating large datasets is also available.
+
+```bash
+# Default: 50 groups x 20 streams x 100 events = 100,000 events
+./scripts/seed-large-testdata.sh
+
+# Customizable with options
+./scripts/seed-large-testdata.sh --groups 10 --streams 5 --events 50
+./scripts/seed-large-testdata.sh --groups 100 --streams 50 --events 500
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--groups` | 50 | Number of log groups to create |
+| `--streams` | 20 | Number of streams per group |
+| `--events` | 100 | Number of events per stream |
+
+### Stopping floci
+
+```bash
+docker compose down
+```
 
 ## Development Workflow
 
@@ -105,6 +163,15 @@ lazycwl/
 ```
 
 See `CLAUDE.md` and `docs/requirements.md` for implementation details.
+
+## Tech Stack
+
+- [Go](https://go.dev/)
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework
+- [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
+- [Lip Gloss](https://github.com/charmbracelet/lipgloss) — Styling
+- [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2) — CloudWatch Logs API
+- [Nix Flake](https://nixos.wiki/wiki/Flakes) — Build management
 
 ## Important Notes
 

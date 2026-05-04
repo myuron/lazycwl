@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/myuron/lazycwl/internal/aws"
 )
 
@@ -1190,6 +1192,139 @@ func TestModel_PaneHeight_FewItemsBothSides(t *testing.T) {
 	}
 }
 
+// --- Loading popup ---
+
+func TestModel_NewModel_LoadingTrueWithClient(t *testing.T) {
+	// A non-nil client means Init() will fetch on startup, so loading must
+	// be true on the first frame — a value-receiver Init() can't set it.
+	client := &aws.Client{}
+	m := NewModel(client)
+	if !m.loading {
+		t.Error("expected loading=true with non-nil client")
+	}
+	if m.loadingMessage == "" {
+		t.Error("expected non-empty loading message on initial load")
+	}
+}
+
+func TestModel_NewModel_LoadingFalseWithNilClient(t *testing.T) {
+	m := NewModel(nil)
+	if m.loading {
+		t.Error("expected loading=false with nil client")
+	}
+}
+
+func TestModel_NewModelWithOptions_LoadingTrueWithClient(t *testing.T) {
+	client := &aws.Client{}
+	m := NewModelWithOptions(client, Options{InitialGroup: "/aws/lambda/x"})
+	if !m.loading {
+		t.Error("expected loading=true with non-nil client and InitialGroup")
+	}
+}
+
+func TestModel_LoadingPopup_RendersOverBaseLayout(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	m.loading = true
+	m.loadingMessage = "Loading log groups..."
+
+	view := m.View()
+
+	if !strings.Contains(view, "Loading log groups") {
+		t.Error("expected popup to display the loading message")
+	}
+	if !strings.Contains(view, "Log Groups") {
+		t.Error("expected base layout 'Log Groups' header behind popup")
+	}
+	if !strings.Contains(view, "Streams") {
+		t.Error("expected base layout 'Streams' header behind popup")
+	}
+}
+
+func TestModel_LoadingPopup_HiddenWhenNotLoading(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	m.loading = false
+	m.logGroups = []aws.LogGroup{{Name: "/test/group"}}
+
+	view := m.View()
+	if strings.Contains(view, "Loading") {
+		t.Error("expected no loading text when loading=false")
+	}
+}
+
+func TestModel_LoadingPopup_DoesNotExceedTerminalSize(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 80
+	m.height = 24
+	m.loading = true
+	m.loadingMessage = "Loading..."
+
+	view := m.View()
+	lines := strings.Split(view, "\n")
+
+	if len(lines) > m.height-1 {
+		t.Errorf("rendered %d lines but max is %d", len(lines), m.height-1)
+	}
+	for i, line := range lines {
+		w := runeWidth(line)
+		if w > m.width {
+			t.Errorf("line %d: width %d exceeds terminal width %d", i, w, m.width)
+		}
+	}
+}
+
+func TestModel_NavigateForward_GroupsToStreams_SetsLoadingMessage(t *testing.T) {
+	m := NewModel(nil)
+	m.logGroups = []aws.LogGroup{{Name: "/aws/lambda/func-a"}}
+	m.cursor = 0
+
+	m, _ = update(m, keyMsg('l'))
+
+	if !m.loading {
+		t.Error("expected loading=true after navigating to streams")
+	}
+	if !strings.Contains(strings.ToLower(m.loadingMessage), "stream") {
+		t.Errorf("expected loadingMessage to mention streams, got %q", m.loadingMessage)
+	}
+}
+
+func TestModel_NavigateForward_StreamsToEvents_SetsLoadingMessage(t *testing.T) {
+	m := NewModel(nil)
+	m.currentView = viewStreams
+	m.selectedGroup = "/aws/lambda/func-a"
+	m.logStreams = []aws.LogStream{
+		{Name: "stream-001", LastEventTimestamp: time.Now()},
+	}
+	m.cursor = 0
+
+	m, _ = update(m, keyMsg('l'))
+
+	if !m.loading {
+		t.Error("expected loading=true after navigating to events")
+	}
+	if !strings.Contains(strings.ToLower(m.loadingMessage), "event") {
+		t.Errorf("expected loadingMessage to mention events, got %q", m.loadingMessage)
+	}
+}
+
+func TestModel_LoadingMessage_ClearedAfterFetch(t *testing.T) {
+	m := NewModel(nil)
+	m.loading = true
+	m.loadingMessage = "Loading log groups..."
+
+	m, _ = update(m, logGroupsPageMsg{groups: []aws.LogGroup{{Name: "g1"}}})
+
+	if m.loading {
+		t.Error("expected loading=false after groups received")
+	}
+	if m.loadingMessage != "" {
+		t.Errorf("expected loadingMessage to be cleared, got %q", m.loadingMessage)
+	}
+}
+
 func TestModel_PaneHeight_LongGroupNamesWrap(t *testing.T) {
 	// When log group names exceed pane width, lipgloss wraps them into extra
 	// lines.  The pane must still be capped to the expected height so the
@@ -1230,5 +1365,55 @@ func TestModel_PaneHeight_LongGroupNamesWrap(t *testing.T) {
 			}
 			break
 		}
+	}
+}
+
+func TestModel_Err_ReturnsCurrentError(t *testing.T) {
+	m := NewModel(nil)
+	if m.Err() != nil {
+		t.Fatalf("expected initial Err() to be nil, got %v", m.Err())
+	}
+
+	want := errors.New("AccessDeniedException: user is not authorized")
+	m, _ = update(m, errMsg{err: want})
+
+	if got := m.Err(); !errors.Is(got, want) {
+		t.Errorf("expected Err() to return %v, got %v", want, got)
+	}
+}
+
+func TestModel_View_WrapsLongStartupError(t *testing.T) {
+	const width = 40
+	longMsg := "operation error CloudWatch Logs: DescribeLogGroups, https response error StatusCode: 400, RequestID: abcd-1234-very-long, AccessDeniedException: User: arn:aws:iam::123456789012:user/example is not authorized to perform: logs:DescribeLogGroups on resource: arn:aws:logs:ap-northeast-1:123456789012:log-group:*"
+
+	m := NewModel(nil)
+	m.width = width
+	m.height = 24
+	m, _ = update(m, errMsg{err: errors.New(longMsg)})
+
+	out := m.View()
+	if !strings.Contains(out, "Press q to quit.") {
+		t.Errorf("expected footer 'Press q to quit.' in view, got:\n%s", out)
+	}
+
+	for i, line := range strings.Split(out, "\n") {
+		if w := ansi.StringWidth(line); w > width {
+			t.Errorf("line %d exceeds width %d (got %d): %q", i, width, w, line)
+		}
+	}
+}
+
+func TestModel_View_StartupError_FallsBackWhenWidthZero(t *testing.T) {
+	m := NewModel(nil)
+	m.width = 0
+	m.height = 0
+	m, _ = update(m, errMsg{err: errors.New("boom")})
+
+	out := m.View()
+	if !strings.Contains(out, "Error: boom") {
+		t.Errorf("expected error body in view, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Press q to quit.") {
+		t.Errorf("expected footer in view, got:\n%s", out)
 	}
 }

@@ -93,9 +93,10 @@ type Model struct {
 	groupsNextToken  *string
 	streamsNextToken *string
 
-	loading     bool
-	loadingMore bool
-	err         error
+	loading        bool
+	loadingMessage string
+	loadingMore    bool
+	err            error
 
 	// Tail mode state
 	tailEvents       []aws.LogEvent
@@ -118,18 +119,6 @@ type Options struct {
 // NewModel creates a new TUI model.
 func NewModel(client *aws.Client) Model {
 	ctx, cancel := context.WithCancel(context.Background())
-	return Model{
-		ctx:            ctx,
-		cancel:         cancel,
-		client:         client,
-		currentView:    viewGroups,
-		sortDescending: true,
-	}
-}
-
-// NewModelWithOptions creates a new TUI model with the given options.
-func NewModelWithOptions(client *aws.Client, opts Options) Model {
-	ctx, cancel := context.WithCancel(context.Background())
 	m := Model{
 		ctx:            ctx,
 		cancel:         cancel,
@@ -137,12 +126,32 @@ func NewModelWithOptions(client *aws.Client, opts Options) Model {
 		currentView:    viewGroups,
 		sortDescending: true,
 	}
-	if opts.InitialGroup != "" {
-		m.selectedGroup = opts.InitialGroup
-		m.currentView = viewStreams
+	if client != nil {
+		// Init() runs on a value receiver, so the loading flag must be set
+		// here to be visible on the very first frame.
+		m.loading = true
+		m.loadingMessage = "Loading log groups..."
 	}
 	return m
 }
+
+// NewModelWithOptions creates a new TUI model with the given options.
+func NewModelWithOptions(client *aws.Client, opts Options) Model {
+	m := NewModel(client)
+	if opts.InitialGroup != "" {
+		m.selectedGroup = opts.InitialGroup
+		m.currentView = viewStreams
+		if client != nil {
+			m.loadingMessage = "Loading log streams..."
+		}
+	}
+	return m
+}
+
+// Err returns the sticky error currently held by the model, if any.
+// main.go reads this after the program exits to print the error to stderr,
+// since the alt screen is gone by then and the in-TUI error message is lost.
+func (m Model) Err() error { return m.err }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
@@ -168,12 +177,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logGroups = msg.groups
 		m.groupsNextToken = msg.nextToken
 		m.loading = false
+		m.loadingMessage = ""
 		return m, nil
 
 	case logStreamsPageMsg:
 		m.logStreams = msg.streams
 		m.streamsNextToken = msg.nextToken
 		m.loading = false
+		m.loadingMessage = ""
 		m.cursor = 0
 		m.offset = 0
 		return m, nil
@@ -192,6 +203,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case logEventsMsg:
 		m.loading = false
+		m.loadingMessage = ""
 		return m, m.openEditor([]aws.LogEvent(msg))
 
 	case editorFinishedMsg:
@@ -239,6 +251,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		m.loading = false
+		m.loadingMessage = ""
 		return m, nil
 
 	case tea.KeyMsg:

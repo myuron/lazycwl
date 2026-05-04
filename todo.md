@@ -121,3 +121,14 @@
 - [x] 2026-04-25 bug_017: tailErrCh追加、stream.Err()をerrCh経由で surface、waitForTailEventで優先読み取り + 2テスト追加
 - [x] 2026-04-25 bug_005: G キーで tailPaused=false にして auto-scroll 再開 + テスト追加
 - [x] 2026-04-25 bug_018: マルチ選択ストリーム名を sort.Strings で決定的順序に + テスト追加
+
+## ローディング表示改善
+- [x] 2026-05-04 ローディングポップアップのテスト9件追加（loadingMessage/ポップアップ重ね合わせ/サイズ制約/コンテキスト別メッセージ/クリア）
+- [x] 2026-05-04 Init() の loading=true がvalue receiverで失われるバグを修正（NewModel/NewModelWithOptionsで初期化）
+- [x] 2026-05-04 loadingMessage フィールド追加 + groups/streams/events/sort 各fetch呼び出しで文脈に応じたメッセージを設定
+- [x] 2026-05-04 lipgloss + x/ansi.Cut で中央オーバーレイのポップアップを実装（preview.goに renderBaseView/renderLoadingPopup/overlayPopup を追加）
+
+## 起動時エラー表示の見切れ修正
+- [x] 2026-05-04 起動時エラー表示のテスト追加3件（Err()アクセサ / View()のwidth折り返し / width=0フォールバック）
+- [x] 2026-05-04 Model.Err() アクセサ追加 + preview.go の renderErrorView() で lipgloss 折り返し
+- [x] 2026-05-04 main.go で p.Run() 終了後に Model.Err() を stderr へ出力

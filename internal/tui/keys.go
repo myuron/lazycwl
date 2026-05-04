@@ -94,6 +94,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.offset = 0
 				m.loading = true
+				m.loadingMessage = "Loading log streams..."
 				return m, m.fetchLogStreams(m.selectedGroup)
 			}
 			return m, nil

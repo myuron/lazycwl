@@ -71,6 +71,7 @@ func (m Model) navigateForward() (tea.Model, tea.Cmd) {
 		m.offset = 0
 		m.searchQuery = ""
 		m.loading = true
+		m.loadingMessage = "Loading log streams..."
 		return m, m.fetchLogStreams(m.selectedGroup)
 	case viewStreams:
 		streams := m.sortedStreams(m.filteredStreams())
@@ -78,6 +79,7 @@ func (m Model) navigateForward() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.loading = true
+		m.loadingMessage = "Loading log events..."
 		// If multi-select is active, use selected streams; otherwise use cursor
 		var streamNames []string
 		if len(m.selected) > 0 {

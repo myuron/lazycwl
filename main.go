@@ -53,9 +53,18 @@ func main() {
 		InitialGroup: group,
 	})
 	p := tea.NewProgram(m, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+	// After the alt screen is restored, surface any sticky model error to
+	// stderr so the full message stays in the user's scrollback.
+	if mm, ok := finalModel.(tui.Model); ok {
+		if e := mm.Err(); e != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", e)
+			os.Exit(1)
+		}
 	}
 }
 

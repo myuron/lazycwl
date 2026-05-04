@@ -5,29 +5,110 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // View implements tea.Model.
 func (m Model) View() string {
-	if m.loading {
-		return "Loading..."
-	}
-
 	// Show full-screen error only when no data is loaded (initial load failure).
 	// Otherwise, errors are shown in the status bar.
 	if m.err != nil && len(m.logGroups) == 0 {
-		return fmt.Sprintf("Error: %v\n\nPress q to quit.", m.err)
+		return m.renderErrorView()
 	}
 
+	base := m.renderBaseView()
+	if m.loading {
+		return overlayPopup(base, m.renderLoadingPopup(), m.width, m.height)
+	}
+	return base
+}
+
+// renderErrorView renders a full-screen startup error wrapped to the
+// terminal width so long AWS error messages don't run off the alt screen.
+func (m Model) renderErrorView() string {
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
+	body := lipgloss.NewStyle().
+		Width(width).
+		Render(fmt.Sprintf("Error: %v", m.err))
+	return body + "\n\nPress q to quit."
+}
+
+// renderBaseView returns the underlying view without any loading overlay.
+func (m Model) renderBaseView() string {
 	if m.currentView == viewTail {
 		return m.renderTailView()
 	}
-
 	if m.width == 0 {
 		return m.viewSimple()
 	}
-
 	return m.viewTwoColumn()
+}
+
+func (m Model) renderLoadingPopup() string {
+	msg := m.loadingMessage
+	if msg == "" {
+		msg = "Loading..."
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62")).
+		Padding(0, 2).
+		Render(msg)
+}
+
+// overlayPopup places popup centered over base. Width and height are the
+// terminal dimensions; the popup is anchored to the center cell. ANSI codes
+// in base are preserved by ansi.Cut.
+func overlayPopup(base, popup string, width, height int) string {
+	if width == 0 || height == 0 {
+		// No window size yet — fall back to showing the popup alone.
+		return popup
+	}
+
+	baseLines := strings.Split(base, "\n")
+	popupLines := strings.Split(popup, "\n")
+
+	popupH := len(popupLines)
+	popupW := 0
+	for _, l := range popupLines {
+		if w := ansi.StringWidth(l); w > popupW {
+			popupW = w
+		}
+	}
+
+	startRow := (height - popupH) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (width - popupW) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	for i, popupLine := range popupLines {
+		row := startRow + i
+		if row >= len(baseLines) {
+			break
+		}
+		baseLines[row] = overlayLineAt(baseLines[row], popupLine, startCol, popupW, width)
+	}
+	return strings.Join(baseLines, "\n")
+}
+
+// overlayLineAt replaces the visual columns [col, col+popupW) of base with
+// popup, preserving styled segments outside that range. termWidth caps the
+// returned line to the terminal width.
+func overlayLineAt(base, popup string, col, popupW, termWidth int) string {
+	left := ansi.Cut(base, 0, col)
+	leftW := ansi.StringWidth(left)
+	if leftW < col {
+		left += strings.Repeat(" ", col-leftW)
+	}
+	right := ansi.Cut(base, col+popupW, termWidth)
+	return left + popup + right
 }
 
 func (m Model) viewSimple() string {

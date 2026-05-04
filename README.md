@@ -10,6 +10,8 @@
 [![GitHub Downloads](https://img.shields.io/github/downloads/myuron/lazycwl/total)](https://github.com/myuron/lazycwl/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+<img width="1920" height="1032" alt="image" src="https://github.com/user-attachments/assets/70532a50-bb92-492e-b560-c23ef91628c6" />
+
 A TUI tool for quickly browsing and investigating AWS CloudWatch Logs from the terminal. Browse log groups and streams with yazi-style hierarchical navigation, then open selected logs in `$EDITOR` for Vim-based incident investigation.
 
 日本語版: [README.ja.md](README.ja.md)

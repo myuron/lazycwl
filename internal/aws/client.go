@@ -271,10 +271,15 @@ func (c *Client) paginateGetLogEvents(ctx context.Context, input *cloudwatchlogs
 			})
 		}
 
-		// GetLogEvents signals end-of-stream by returning the same
-		// NextForwardToken as the previous call, or an empty page.
+		// CloudWatch Logs signals end-of-stream by returning the same
+		// NextForwardToken as the previous call. Empty Events with a NEW
+		// token does NOT mean end — per AWS docs, "the service will
+		// sometimes (especially during periods of low or no activity)
+		// return an empty list of events even if you have not reached
+		// the end of the stream's log events." Breaking on len()==0
+		// silently truncates large time-bounded fetches.
 		nextToken := awssdk.ToString(out.NextForwardToken)
-		if nextToken == "" || nextToken == prevToken || len(out.Events) == 0 {
+		if nextToken == "" || nextToken == prevToken {
 			break
 		}
 		prevToken = nextToken

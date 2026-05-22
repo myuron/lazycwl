@@ -399,25 +399,40 @@ func TestClient_GetLogEvents_PaginationStopsOnSameToken(t *testing.T) {
 	}
 }
 
-func TestClient_GetLogEvents_PaginationStopsOnEmptyPage(t *testing.T) {
-	// If a page returns 0 events, pagination should stop even if the token changes.
+func TestClient_GetLogEvents_PaginationContinuesPastEmptyPage(t *testing.T) {
+	// Real CloudWatch Logs sometimes returns an empty Events list with a new
+	// NextForwardToken during pagination (especially over low-activity time
+	// windows). Pagination MUST continue and not truncate the result.
 	callCount := 0
 	mock := &mockLogsAPI{
 		getLogEventsFn: func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
 			callCount++
-			if callCount == 1 {
+			switch callCount {
+			case 1:
 				return &cloudwatchlogs.GetLogEventsOutput{
-					Events: []types.OutputLogEvent{
-						{Timestamp: aws.Int64(1000), Message: aws.String("event-1")},
-					},
+					Events:           []types.OutputLogEvent{{Timestamp: aws.Int64(1000), Message: aws.String("event-1")}},
 					NextForwardToken: aws.String("token-2"),
 				}, nil
+			case 2:
+				// Empty page with a NEW token — must NOT terminate.
+				return &cloudwatchlogs.GetLogEventsOutput{
+					Events:           []types.OutputLogEvent{},
+					NextForwardToken: aws.String("token-3"),
+				}, nil
+			case 3:
+				return &cloudwatchlogs.GetLogEventsOutput{
+					Events:           []types.OutputLogEvent{{Timestamp: aws.Int64(3000), Message: aws.String("event-3")}},
+					NextForwardToken: aws.String("token-4"),
+				}, nil
+			case 4:
+				// Same token signals end-of-stream.
+				return &cloudwatchlogs.GetLogEventsOutput{
+					Events:           []types.OutputLogEvent{},
+					NextForwardToken: aws.String("token-4"),
+				}, nil
 			}
-			// Second page: empty events
-			return &cloudwatchlogs.GetLogEventsOutput{
-				Events:           []types.OutputLogEvent{},
-				NextForwardToken: aws.String("token-3"),
-			}, nil
+			t.Fatalf("unexpected extra call: %d", callCount)
+			return nil, nil
 		},
 	}
 
@@ -427,11 +442,11 @@ func TestClient_GetLogEvents_PaginationStopsOnEmptyPage(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event (stop on empty page), got %d", len(events))
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events across empty intermediate page, got %d", len(events))
 	}
-	if callCount != 2 {
-		t.Errorf("expected 2 API calls, got %d", callCount)
+	if callCount != 4 {
+		t.Errorf("expected 4 API calls (continue past empty page, stop on same token), got %d", callCount)
 	}
 }
 

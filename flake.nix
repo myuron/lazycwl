@@ -22,7 +22,7 @@
     overlays.default = final: prev: {
       lazycwl = final.buildGoModule {
         pname = "lazycwl";
-        version = "1.4.1";
+        version = "1.4.2";
         src = self;
         vendorHash = "sha256-71IHdtlB5cjOiYrrr5SJ8d/61ZSuWXGvtra3q1ULFCE=";
       };

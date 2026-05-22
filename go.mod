@@ -2,6 +2,10 @@ module github.com/myuron/lazycwl
 
 go 1.26.1
 
+// v1.4.1 silently truncated GetLogEvents over sparse time windows due to a
+// premature pagination break on empty intermediate pages. Fixed in v1.4.2.
+retract v1.4.1
+
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.14

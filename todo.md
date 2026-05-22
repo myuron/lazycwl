@@ -132,3 +132,12 @@
 - [x] 2026-05-04 起動時エラー表示のテスト追加3件（Err()アクセサ / View()のwidth折り返し / width=0フォールバック）
 - [x] 2026-05-04 Model.Err() アクセサ追加 + preview.go の renderErrorView() で lipgloss 折り返し
 - [x] 2026-05-04 main.go で p.Run() 終了後に Model.Err() を stderr へ出力
+
+## ログ取得の並列化 (Issue #26)
+- [x] 2026-05-22 LogStream に FirstEventTimestamp フィールド追加 + toLogStream ヘルパー切り出し
+- [x] 2026-05-22 DescribeLogStream 単一ストリーム metadata 取得を追加（exact-match filter）
+- [x] 2026-05-22 GetLogEventsByTimeRange を追加（StartTime/EndTime 指定 + ページネーション）
+- [x] 2026-05-22 GetMultiStreamLogEvents を時間チャンク並列に再実装（planTimeChunks で [first,last+1) を timeChunks 等分）
+- [x] 2026-05-22 グローバルセマフォ maxConcurrent=8 で全 GetLogEvents 呼び出しの並列度を抑制
+- [x] 2026-05-22 describe 失敗 / range 不正 / 極小ストリームは逐次 GetLogEvents にフォールバック
+- [x] 2026-05-22 テスト追加 7件（Describe / TimeRange / 並列チャンク / フォールバック / FirstEventTimestamp 伝播）

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -150,12 +151,12 @@ func TestClient_ListLogStreams(t *testing.T) {
 			return &cloudwatchlogs.DescribeLogStreamsOutput{
 				LogStreams: []types.LogStream{
 					{
-						LogStreamName:        aws.String("stream-001"),
-						LastEventTimestamp:    aws.Int64(nowMs),
+						LogStreamName:      aws.String("stream-001"),
+						LastEventTimestamp: aws.Int64(nowMs),
 					},
 					{
-						LogStreamName:        aws.String("stream-002"),
-						LastEventTimestamp:    aws.Int64(nowMs - 60000),
+						LogStreamName:      aws.String("stream-002"),
+						LastEventTimestamp: aws.Int64(nowMs - 60000),
 					},
 				},
 			}, nil
@@ -198,7 +199,7 @@ func TestClient_ListLogStreamsPage(t *testing.T) {
 			return &cloudwatchlogs.DescribeLogStreamsOutput{
 				LogStreams: []types.LogStream{
 					{
-						LogStreamName:     aws.String("stream-001"),
+						LogStreamName:      aws.String("stream-001"),
 						LastEventTimestamp: aws.Int64(nowMs),
 					},
 				},
@@ -239,11 +240,11 @@ func TestClient_ListLogStreamsPage_Ascending(t *testing.T) {
 			return &cloudwatchlogs.DescribeLogStreamsOutput{
 				LogStreams: []types.LogStream{
 					{
-						LogStreamName:     aws.String("stream-old"),
+						LogStreamName:      aws.String("stream-old"),
 						LastEventTimestamp: aws.Int64(nowMs - 60000),
 					},
 					{
-						LogStreamName:     aws.String("stream-new"),
+						LogStreamName:      aws.String("stream-new"),
 						LastEventTimestamp: aws.Int64(nowMs),
 					},
 				},
@@ -462,21 +463,29 @@ func TestClient_GetLogEvents_ContextCancellation(t *testing.T) {
 }
 
 func TestFetchMultiLogEvents_ConcurrencyLimit(t *testing.T) {
-	// Verify that concurrent goroutines are limited.
-	var maxConcurrent atomic.Int32
+	// Verify that concurrent GetLogEvents goroutines are bounded by the
+	// global semaphore. DescribeLogStreams returns no event-time range, so
+	// each stream falls back to a single sequential GetLogEvents call —
+	// keeping this test focused on the multi-stream concurrency cap.
+	var peakConcurrent atomic.Int32
 	var current atomic.Int32
 
 	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{LogStreamName: params.LogStreamNamePrefix},
+				},
+			}, nil
+		},
 		getLogEventsFn: func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
 			cur := current.Add(1)
-			// Track the peak concurrency
 			for {
-				old := maxConcurrent.Load()
-				if cur <= old || maxConcurrent.CompareAndSwap(old, cur) {
+				old := peakConcurrent.Load()
+				if cur <= old || peakConcurrent.CompareAndSwap(old, cur) {
 					break
 				}
 			}
-			// Simulate some work
 			time.Sleep(10 * time.Millisecond)
 			current.Add(-1)
 			return &cloudwatchlogs.GetLogEventsOutput{
@@ -489,7 +498,6 @@ func TestFetchMultiLogEvents_ConcurrencyLimit(t *testing.T) {
 	}
 
 	client := &Client{api: mock}
-	// Request 20 streams to ensure the limit is tested
 	streams := make([]string, 20)
 	for i := range streams {
 		streams[i] = fmt.Sprintf("stream-%d", i)
@@ -501,11 +509,305 @@ func TestFetchMultiLogEvents_ConcurrencyLimit(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	peak := maxConcurrent.Load()
-	if peak > maxConcurrentStreams {
-		t.Errorf("peak concurrency %d exceeded limit %d", peak, maxConcurrentStreams)
+	peak := peakConcurrent.Load()
+	if peak > maxConcurrent {
+		t.Errorf("peak concurrency %d exceeded limit %d", peak, maxConcurrent)
 	}
 	if peak == 0 {
 		t.Error("expected at least 1 concurrent call")
+	}
+}
+
+func TestClient_DescribeLogStream(t *testing.T) {
+	nowMs := time.Now().UnixMilli()
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			if aws.ToString(params.LogGroupName) != "/aws/lambda/func-a" {
+				t.Errorf("unexpected log group: %s", aws.ToString(params.LogGroupName))
+			}
+			if aws.ToString(params.LogStreamNamePrefix) != "stream-001" {
+				t.Errorf("expected LogStreamNamePrefix=stream-001, got %s", aws.ToString(params.LogStreamNamePrefix))
+			}
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{
+						LogStreamName:       aws.String("stream-001-other"),
+						FirstEventTimestamp: aws.Int64(nowMs - 200000),
+						LastEventTimestamp:  aws.Int64(nowMs - 100000),
+					},
+					{
+						LogStreamName:       aws.String("stream-001"),
+						FirstEventTimestamp: aws.Int64(nowMs - 60000),
+						LastEventTimestamp:  aws.Int64(nowMs),
+					},
+				},
+			}, nil
+		},
+	}
+
+	client := &Client{api: mock}
+	stream, err := client.DescribeLogStream(context.Background(), "/aws/lambda/func-a", "stream-001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stream.Name != "stream-001" {
+		t.Errorf("expected exact-match Name=stream-001, got %s", stream.Name)
+	}
+	if got := stream.FirstEventTimestamp.UnixMilli(); got != nowMs-60000 {
+		t.Errorf("expected FirstEventTimestamp=%d, got %d", nowMs-60000, got)
+	}
+	if got := stream.LastEventTimestamp.UnixMilli(); got != nowMs {
+		t.Errorf("expected LastEventTimestamp=%d, got %d", nowMs, got)
+	}
+}
+
+func TestClient_DescribeLogStream_NotFound(t *testing.T) {
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			return &cloudwatchlogs.DescribeLogStreamsOutput{LogStreams: nil}, nil
+		},
+	}
+	client := &Client{api: mock}
+	if _, err := client.DescribeLogStream(context.Background(), "g", "missing"); err == nil {
+		t.Fatal("expected error when stream is not found")
+	}
+}
+
+func TestClient_GetLogEventsByTimeRange(t *testing.T) {
+	calls := 0
+	mock := &mockLogsAPI{
+		getLogEventsFn: func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
+			calls++
+			if got := aws.ToInt64(params.StartTime); got != 1000 {
+				t.Errorf("expected StartTime=1000, got %d", got)
+			}
+			if got := aws.ToInt64(params.EndTime); got != 5000 {
+				t.Errorf("expected EndTime=5000, got %d", got)
+			}
+			if !aws.ToBool(params.StartFromHead) {
+				t.Error("expected StartFromHead=true")
+			}
+			// Empty events on the second call terminates pagination.
+			if calls == 1 {
+				return &cloudwatchlogs.GetLogEventsOutput{
+					Events: []types.OutputLogEvent{
+						{Timestamp: aws.Int64(1000), Message: aws.String("a")},
+						{Timestamp: aws.Int64(4000), Message: aws.String("b")},
+					},
+					NextForwardToken: aws.String("next"),
+				}, nil
+			}
+			return &cloudwatchlogs.GetLogEventsOutput{
+				Events:           []types.OutputLogEvent{},
+				NextForwardToken: aws.String("next"),
+			}, nil
+		},
+	}
+	client := &Client{api: mock}
+	events, err := client.GetLogEventsByTimeRange(context.Background(), "g", "s", 1000, 5000)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+}
+
+func TestClient_GetLogEventsByTimeRange_Pagination(t *testing.T) {
+	// Within a single time window, pagination still uses NextForwardToken.
+	calls := 0
+	mock := &mockLogsAPI{
+		getLogEventsFn: func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
+			calls++
+			if aws.ToInt64(params.StartTime) != 100 || aws.ToInt64(params.EndTime) != 200 {
+				t.Errorf("unexpected time window: start=%d end=%d", aws.ToInt64(params.StartTime), aws.ToInt64(params.EndTime))
+			}
+			switch calls {
+			case 1:
+				return &cloudwatchlogs.GetLogEventsOutput{
+					Events:           []types.OutputLogEvent{{Timestamp: aws.Int64(100), Message: aws.String("e1")}},
+					NextForwardToken: aws.String("t2"),
+				}, nil
+			case 2:
+				if aws.ToString(params.NextToken) != "t2" {
+					t.Errorf("expected NextToken=t2, got %s", aws.ToString(params.NextToken))
+				}
+				return &cloudwatchlogs.GetLogEventsOutput{
+					Events:           []types.OutputLogEvent{{Timestamp: aws.Int64(150), Message: aws.String("e2")}},
+					NextForwardToken: aws.String("t2"),
+				}, nil
+			}
+			t.Fatal("too many calls")
+			return nil, nil
+		},
+	}
+	client := &Client{api: mock}
+	events, err := client.GetLogEventsByTimeRange(context.Background(), "g", "s", 100, 200)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 2 || calls != 2 {
+		t.Errorf("expected 2 events from 2 calls, got %d events / %d calls", len(events), calls)
+	}
+}
+
+func TestClient_GetMultiStreamLogEvents_TimeChunksInParallel(t *testing.T) {
+	// When DescribeLogStreams returns a wide time range, GetMultiStreamLogEvents
+	// should split the range into multiple chunks and fetch them in parallel,
+	// reducing wall-clock time vs. sequential pagination.
+	var getCalls atomic.Int32
+	var peakConcurrent atomic.Int32
+	var current atomic.Int32
+
+	var startsMu sync.Mutex
+	seenWindows := make(map[[2]int64]bool)
+
+	const firstMs = int64(1_000_000)
+	const lastMs = int64(9_000_000)
+
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{
+						LogStreamName:       params.LogStreamNamePrefix,
+						FirstEventTimestamp: aws.Int64(firstMs),
+						LastEventTimestamp:  aws.Int64(lastMs),
+					},
+				},
+			}, nil
+		},
+		getLogEventsFn: func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
+			getCalls.Add(1)
+			cur := current.Add(1)
+			for {
+				old := peakConcurrent.Load()
+				if cur <= old || peakConcurrent.CompareAndSwap(old, cur) {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+			current.Add(-1)
+
+			startsMu.Lock()
+			seenWindows[[2]int64{aws.ToInt64(params.StartTime), aws.ToInt64(params.EndTime)}] = true
+			startsMu.Unlock()
+
+			return &cloudwatchlogs.GetLogEventsOutput{
+				Events: []types.OutputLogEvent{
+					{Timestamp: params.StartTime, Message: aws.String("e")},
+				},
+				NextForwardToken: aws.String("end"),
+			}, nil
+		},
+	}
+
+	client := &Client{api: mock}
+	events, err := client.GetMultiStreamLogEvents(context.Background(), "g", []string{"stream-001"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if getCalls.Load() < 2 {
+		t.Errorf("expected multiple chunked GetLogEvents calls, got %d", getCalls.Load())
+	}
+	if peakConcurrent.Load() < 2 {
+		t.Errorf("expected concurrent execution across chunks, got peak=%d", peakConcurrent.Load())
+	}
+	if len(events) < 2 {
+		t.Errorf("expected at least 2 events from chunked fetch, got %d", len(events))
+	}
+
+	// Time windows must be non-overlapping and cover [firstMs, lastMs+1).
+	startsMu.Lock()
+	defer startsMu.Unlock()
+	type window struct{ start, end int64 }
+	windows := make([]window, 0, len(seenWindows))
+	for k := range seenWindows {
+		windows = append(windows, window{k[0], k[1]})
+	}
+	// Sort by start ascending.
+	for i := 0; i < len(windows); i++ {
+		for j := i + 1; j < len(windows); j++ {
+			if windows[j].start < windows[i].start {
+				windows[i], windows[j] = windows[j], windows[i]
+			}
+		}
+	}
+	if windows[0].start != firstMs {
+		t.Errorf("first window start=%d, expected %d", windows[0].start, firstMs)
+	}
+	if windows[len(windows)-1].end != lastMs+1 {
+		t.Errorf("last window end=%d, expected %d", windows[len(windows)-1].end, lastMs+1)
+	}
+	for i := 1; i < len(windows); i++ {
+		if windows[i].start != windows[i-1].end {
+			t.Errorf("window gap or overlap: prev=[%d,%d) next=[%d,%d)",
+				windows[i-1].start, windows[i-1].end, windows[i].start, windows[i].end)
+		}
+	}
+}
+
+func TestClient_GetMultiStreamLogEvents_FallbackWhenNoTimeRange(t *testing.T) {
+	// DescribeLogStreams returns a stream with no FirstEventTimestamp; the
+	// client must fall back to a plain sequential GetLogEvents (no time
+	// chunking) for that stream and still return its events.
+	var startTimesSeen atomic.Int32
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{LogStreamName: params.LogStreamNamePrefix},
+				},
+			}, nil
+		},
+		getLogEventsFn: func(ctx context.Context, params *cloudwatchlogs.GetLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
+			if params.StartTime != nil || params.EndTime != nil {
+				startTimesSeen.Add(1)
+			}
+			return &cloudwatchlogs.GetLogEventsOutput{
+				Events:           []types.OutputLogEvent{{Timestamp: aws.Int64(1), Message: aws.String("e")}},
+				NextForwardToken: aws.String("same"),
+			}, nil
+		},
+	}
+	client := &Client{api: mock}
+	events, err := client.GetMultiStreamLogEvents(context.Background(), "g", []string{"s"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) == 0 {
+		t.Error("expected at least one event from fallback path")
+	}
+	if startTimesSeen.Load() != 0 {
+		t.Errorf("expected sequential fallback (no StartTime/EndTime), got %d windowed calls", startTimesSeen.Load())
+	}
+}
+
+func TestClient_ListLogStreamsPage_PopulatesFirstEventTimestamp(t *testing.T) {
+	nowMs := time.Now().UnixMilli()
+	mock := &mockLogsAPI{
+		describeLogStreamsFn: func(ctx context.Context, params *cloudwatchlogs.DescribeLogStreamsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogStreamsOutput, error) {
+			return &cloudwatchlogs.DescribeLogStreamsOutput{
+				LogStreams: []types.LogStream{
+					{
+						LogStreamName:       aws.String("s"),
+						FirstEventTimestamp: aws.Int64(nowMs - 60000),
+						LastEventTimestamp:  aws.Int64(nowMs),
+					},
+				},
+			}, nil
+		},
+	}
+	client := &Client{api: mock}
+	streams, _, err := client.ListLogStreamsPage(context.Background(), "g", nil, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(streams) != 1 {
+		t.Fatalf("expected 1 stream, got %d", len(streams))
+	}
+	if got := streams[0].FirstEventTimestamp.UnixMilli(); got != nowMs-60000 {
+		t.Errorf("expected FirstEventTimestamp=%d, got %d", nowMs-60000, got)
 	}
 }

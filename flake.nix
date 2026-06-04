@@ -78,6 +78,7 @@
         packages = with pkgs; [
           go
           awscli2
+          govulncheck
         ];
       };
     }
